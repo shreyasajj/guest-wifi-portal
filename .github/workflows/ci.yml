@@ -92,13 +92,16 @@ jobs:
     steps:
       - name: Merge, or ask Dependabot to rebase if main moved on
         run: |
-          state=$(gh pr view "$PR" --json mergeStateStatus --jq .mergeStateStatus)
-          echo "merge state: $state"
-          if [ "$state" = "BEHIND" ]; then
-            gh pr comment "$PR" --body "@dependabot rebase"
-            exit 0
+          if ! out=$(gh pr merge "$PR" --merge --delete-branch 2>&1); then
+            echo "$out"
+            # Another PR merged first, so this branch is behind main. The rebase reruns CI, which merges it then.
+            if echo "$out" | grep -qi "not up to date"; then
+              gh pr comment "$PR" --body "@dependabot rebase"
+              exit 0
+            fi
+            exit 1
           fi
-          gh pr merge "$PR" --merge --delete-branch
+          echo "$out"
           # A merge made with GITHUB_TOKEN doesn't start a push run, so start the release run on main.
           gh workflow run ci.yml --ref main
 
