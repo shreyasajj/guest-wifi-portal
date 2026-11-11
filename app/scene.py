@@ -19,7 +19,10 @@ def _rng(seed: int):
 
 
 @lru_cache
-def scene_svg(uid: str = "s") -> str:
+def scene_svg(uid: str = "s", moon_x: int = 620, moon_y: int = 225) -> str:
+    """Moon position in the 1200x800 viewBox. The default sits high and near the centre, so a portrait
+    phone (which crops the sides) shows it whole above the card. A moon above y=400 rises behind the far
+    ridge; lower ones sit in front of it, as in the short admin header, which passes its own position."""
     r = _rng(7)
     stars = "".join(
         f'<circle cx="{next(r) * 1200:.0f}" cy="{next(r) * 330:.0f}" r="{next(r) * 1.8 + .5:.1f}" '
@@ -32,17 +35,16 @@ def scene_svg(uid: str = "s") -> str:
         trees.append(f'<polygon points="{x},{560 - h} {x - w:.0f},562 {x + w:.0f},562"/>')
         trees.append(f'<polygon points="{x},{560 - h * .62:.0f} {x - w * 1.25:.0f},562 {x + w * 1.25:.0f},562"/>')
         trees.append(f'<polygon opacity=".22" points="{x},{560 + h * .8:.0f} {x - w:.0f},560 {x + w:.0f},560"/>')
-    hills = (
-        '<polygon class="m1" points="0,420 120,360 230,400 360,300 470,370 560,330 690,250 820,340 930,300 '
-        '1050,360 1200,290 1200,560 0,560"/>'
-        '<circle class="moon" cx="360" cy="445" r="150" opacity=".07"/>'
-        '<circle class="moon" cx="360" cy="445" r="108" opacity=".1"/>'
-        '<circle class="moon" cx="360" cy="445" r="62"/>'
-        '<polygon class="m2" points="0,470 90,430 180,460 260,400 330,452 420,470 540,420 640,470 760,380 '
-        '860,430 960,400 1080,450 1200,410 1200,560 0,560"/>'
-        '<polygon class="m3" points="0,522 140,502 260,532 400,506 520,536 700,512 840,532 1000,502 '
-        '1200,526 1200,560 0,560"/>'
-    )
+    moon = (f'<circle class="moon" cx="{moon_x}" cy="{moon_y}" r="150" opacity=".07"/>'
+            f'<circle class="moon" cx="{moon_x}" cy="{moon_y}" r="108" opacity=".1"/>'
+            f'<circle class="moon" cx="{moon_x}" cy="{moon_y}" r="62"/>')
+    far = ('<polygon class="m1" points="0,420 120,360 230,400 360,300 470,370 560,330 690,250 820,340 930,300 '
+           '1050,360 1200,290 1200,560 0,560"/>')
+    near = ('<polygon class="m2" points="0,470 90,430 180,460 260,400 330,452 420,470 540,420 640,470 760,380 '
+            '860,430 960,400 1080,450 1200,410 1200,560 0,560"/>'
+            '<polygon class="m3" points="0,522 140,502 260,532 400,506 520,536 700,512 840,532 1000,502 '
+            '1200,526 1200,560 0,560"/>')
+    hills = (moon + far if moon_y < 400 else far + moon) + near
     u = uid
     return f"""<svg class="scene-svg" viewBox="0 0 1200 800" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false">
 <defs>

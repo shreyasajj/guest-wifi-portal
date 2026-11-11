@@ -11,3 +11,5 @@ docker-compose*.yml
 .env
 .env.*
 README.md
+scripts
+docs

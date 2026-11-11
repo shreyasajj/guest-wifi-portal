@@ -1,0 +1,2 @@
+# Only for scripts/screenshots.py; not needed to run or test the portal.
+playwright==1.65.0
