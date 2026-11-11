@@ -49,6 +49,7 @@ app/             FastAPI app: guest pages, admin UI, REST + SSE API, background 
 tests/           98 tests with mocked OPNsense and CardDAV
 deploy/          auto-update timer for the server
 docs/            screenshots
+scripts/         demo server and screenshot generator
 .github/         CI: tests on every PR, image published to GHCR on every push to main; branch-protection ruleset
 docker-compose.yml
 .env.example
@@ -529,5 +530,16 @@ pytest -q                     # 98 tests, mocked OPNsense + CardDAV
 CI runs the same tests on every pull request; see [GitHub, CI and automatic deploys](#github-ci-and-automatic-deploys).
 
 The tests cover phone and birthday matching (several contacts with one phone, mixed BDAY/no BDAY, mismatch never creating an approval, year-less BDAY), the one-phone rule, the approval state machine (20-second cooldown, reuse of pending requests, expiry, double and concurrent resolution), CardDAV ETag conflicts, the reconciler, presence, the rate limiter, trusted-proxy handling, the OPNsense client (exact request bodies, all three DHCP backends, alias mode) and full HTTP flows.
+
+### Screenshots
+
+The README images in `docs/screenshots/` are generated, not hand-made. After a UI change:
+
+```bash
+pip install -r scripts/requirements-screenshots.txt && playwright install chromium
+python scripts/screenshots.py
+```
+
+This starts `scripts/demo_server.py` (the portal against the test fakes, with made-up people and devices), clicks through the guest flow and admin pages in headless Chromium, and overwrites the PNGs. To explore the demo yourself: `python scripts/demo_server.py /tmp/demo.db 8765`, then open `http://127.0.0.1:8765/` or `/admin` (user `admin`, password `demo`).
 
 Fonts: Oswald and Raleway (SIL Open Font License), self-hosted in `app/static/fonts`.
