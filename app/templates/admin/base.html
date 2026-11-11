@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>{% block title %}{{ site_name }} Guest Admin{% endblock %}</title>
+<link rel="stylesheet" href="{{ url_for('static', path='portal.css') }}">
+<script src="{{ url_for('static', path='htmx.min.js') }}" defer></script>
+<script src="{{ url_for('static', path='htmx-sse.js') }}" defer></script>
+</head>
+<body class="admin" hx-ext="sse" sse-connect="/admin/events" hx-headers='{"X-CSRF-Token": "{{ csrf_token(request) }}"}'>
+<div class="scene">{{ scene|safe }}</div>
+<header class="topbar">
+  <div class="brand">{{ site_name }} · Guest Wi‑Fi</div>
+  <div class="who">
+    <span>{{ admin.name }}</span>
+    <form method="post" action="/admin/logout"><input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}"><button type="submit">Sign out</button></form>
+  </div>
+</header>
+<nav class="tabs" aria-label="Sections">
+  <a href="/admin" {% if active == 'dashboard' %}aria-current="page"{% endif %}>Overview
+    <span hx-get="/admin/partials/badge" hx-trigger="load, refresh from:body, sse:approval_requested, sse:approval_resolved" hx-swap="innerHTML"></span></a>
+  <a href="/admin/people" {% if active == 'people' %}aria-current="page"{% endif %}>People</a>
+  <a href="/admin/devices" {% if active == 'devices' %}aria-current="page"{% endif %}>Devices</a>
+  <a href="/admin/unidentified" {% if active == 'unidentified' %}aria-current="page"{% endif %}>Unidentified</a>
+  <a href="/admin/audit" {% if active == 'audit' %}aria-current="page"{% endif %}>Audit log</a>
+</nav>
+<main class="wrap">
+  <div id="flash" aria-live="polite"></div>
+  {% block main %}{% endblock %}
+</main>
+</body>
+</html>

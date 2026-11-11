@@ -1,0 +1,28 @@
+{% if not rows %}<div class="empty">Everything in OPNsense matches your records.</div>{% else %}
+<div class="table-wrap"><table>
+<thead><tr><th>MAC</th><th>IP</th><th>Found in</th><th>First seen</th><th>Adopt (assign to person)</th><th></th></tr></thead>
+<tbody>
+{% for u in rows %}
+<tr>
+  <td class="mono">{{ u.mac }}</td>
+  <td class="mono">{{ u.ip or '—' }}</td>
+  <td>{% for s in u.sources %}<span class="pill off">{{ {'zone':'allowed MACs','alias':'alias','session':'session'}[s] }}</span> {% endfor %}</td>
+  <td>{{ u.first_seen[:16].replace('T', ' ') }}</td>
+  <td>
+    {% if contacts %}
+    <form class="inline-form" hx-post="/admin/unidentified/{{ u.mac }}/adopt" hx-target="#flash">
+      <select name="contact_uid" aria-label="Person" required>
+        <option value="">Choose a contact…</option>
+        {% for c in contacts %}<option value="{{ c.uid }}">{{ c.display_name }}{% if c.phones %} · {{ c.phones[0] }}{% endif %}</option>{% endfor %}
+      </select>
+      <select name="device_type" aria-label="Type">{% for t in ['phone','computer','tablet','other'] %}<option value="{{ t }}" {% if t == 'other' %}selected{% endif %}>{{ t|capitalize }}</option>{% endfor %}</select>
+      <input name="nickname" placeholder="Nickname" aria-label="Nickname" maxlength="60" size="12">
+      <button class="chip primary" type="submit">Adopt</button>
+    </form>
+    {% else %}<span style="color:var(--muted)">Contacts unavailable</span>{% endif %}
+  </td>
+  <td><button class="chip danger" hx-post="/admin/unidentified/{{ u.mac }}/remove" hx-target="#flash" hx-confirm="Remove {{ u.mac }} from OPNsense and disconnect it?">Remove</button></td>
+</tr>
+{% endfor %}
+</tbody></table></div>
+{% endif %}

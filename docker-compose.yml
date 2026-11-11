@@ -1,0 +1,19 @@
+services:
+  portal:
+    # Built and pushed by GitHub Actions on every push to main (.github/workflows/ci.yml).
+    # Pin a specific build with e.g. PORTAL_IMAGE=ghcr.io/shreyasajj/guest-wifi-portal:sha-1a2b3c4
+    image: ${PORTAL_IMAGE:-ghcr.io/shreyasajj/guest-wifi-portal:latest}
+    container_name: guest-wifi-portal
+    env_file: .env
+    environment:
+      DATABASE_URL: sqlite:////data/portal.db
+    ports:
+      # Only your reverse proxy needs to reach this. Bind to the server's LAN IP
+      # (e.g. "192.168.1.20:8080:8080") rather than every interface.
+      - "8080:8080"
+    volumes:
+      - portal-data:/data
+    restart: unless-stopped
+
+volumes:
+  portal-data:

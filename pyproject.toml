@@ -1,0 +1,21 @@
+[project]
+name = "guest-wifi-portal"
+version = "0.1.0"
+requires-python = ">=3.12"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 130
+
+[tool.pylint.format]
+max-line-length = 130
+
+[tool.pylint."messages control"]
+disable = ["missing-module-docstring", "missing-class-docstring", "missing-function-docstring",
+           "too-many-arguments", "too-many-positional-arguments", "too-many-locals", "too-few-public-methods",
+           "broad-exception-caught", "too-many-return-statements", "too-many-branches", "too-many-statements",
+           "too-many-instance-attributes"]

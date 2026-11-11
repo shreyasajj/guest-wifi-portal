@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#21184e">
+<title>{% block title %}{{ site_name }} Guest Wi‑Fi{% endblock %}</title>
+<link rel="preload" href="{{ url_for('static', path='fonts/oswald-latin.woff2') }}" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="{{ url_for('static', path='portal.css') }}">
+</head>
+<body>
+<div class="scene">{{ scene|safe }}</div>
+<div class="guest">
+  <div class="brand">{{ site_name }}</div>
+  <main>
+    <section class="card" aria-live="polite">
+      <span class="kicker">Guest Wi‑Fi</span>
+      {% block card %}{% endblock %}
+    </section>
+  </main>
+  <footer>{% block footer %}{% endblock %}</footer>
+</div>
+<script src="{{ url_for('static', path='guest.js') }}" defer></script>
+</body>
+</html>

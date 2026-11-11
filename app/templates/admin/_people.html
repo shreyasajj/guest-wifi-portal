@@ -1,0 +1,28 @@
+{% if not people %}<div class="empty">No guests yet. People appear here after their first sign-in.</div>{% else %}
+<div class="table-wrap"><table>
+<thead><tr><th>Name</th><th>Phone</th><th>Email</th><th>Status</th><th>Devices</th><th></th></tr></thead>
+<tbody>
+{% for p in people %}
+<tr>
+  <td><b>{{ p.name }}</b></td>
+  <td class="mono">{{ p.phones|join(', ') }}</td>
+  <td>{{ p.email or '' }}</td>
+  <td>{% if p.blocked %}<span class="pill bad">Blocked</span>
+      {% elif not p.tracked_device_mac %}<span class="pill off">No phone</span>
+      {% elif p.home %}<span class="pill ok">Home</span>{% else %}<span class="pill off">Away</span>{% endif %}</td>
+  <td><div class="chips">{% for d in p.devices %}
+    <span class="pill {{ 'bad' if d.revoked else ('ok' if d.online else 'off') }}" title="{{ d.mac }}">{{ d.label }}{% if d.type == 'phone' and not d.revoked %} ★{% endif %}</span>
+  {% endfor %}</div></td>
+  <td style="text-align:right">
+    {% if p.blocked %}
+    <button class="chip plain" hx-post="/admin/people/{{ p.person_uid }}/unblock" hx-target="#flash">Unblock</button>
+    {% else %}
+    <button class="chip danger" hx-post="/admin/people/{{ p.person_uid }}/revoke" hx-target="#flash"
+      hx-confirm="Revoke all of {{ p.name }}'s devices and block future sign-ins?">Revoke person</button>
+    {% endif %}
+  </td>
+</tr>
+{% endfor %}
+</tbody></table></div>
+<p class="sub" style="padding:10px 16px;margin:0;color:var(--muted);font-size:.8rem">★ marks the tracked phone used for home/away.</p>
+{% endif %}

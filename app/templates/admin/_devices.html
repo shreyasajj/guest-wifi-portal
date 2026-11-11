@@ -1,0 +1,32 @@
+{% if not devices %}<div class="empty">No devices yet.</div>{% else %}
+<div class="table-wrap"><table>
+<thead><tr><th>Device</th><th>Owner</th><th>MAC</th><th>IP</th><th>First seen</th><th>Last seen</th><th>Status</th><th></th></tr></thead>
+<tbody>
+{% for d in devices %}{% set p = people.get(d.person_uid) %}
+<tr>
+  <td><b>{{ d.label }}</b><br><small style="color:var(--muted)">{{ d.type|capitalize }}{% if d.type == 'phone' and not d.revoked %} · tracked{% endif %}</small></td>
+  <td>{{ p.display_name if p else '—' }}</td>
+  <td class="mono">{{ d.mac }}{% if d.mac|is_private %} <span class="pill off" title="Locally administered (private/randomized) address">private</span>{% endif %}</td>
+  <td class="mono">{{ d.current_ip or '—' }}</td>
+  <td>{{ d.first_seen.strftime('%Y-%m-%d') }}</td>
+  <td>{{ d.last_seen|ago }}</td>
+  <td>{% if d.revoked %}<span class="pill bad" title="{{ d.revoke_reason or '' }}">{{ 'Expired' if (d.revoke_reason or '').startswith('expired') else 'Revoked' }}</span>
+      {% elif d.online %}<span class="pill ok">Online</span>{% else %}<span class="pill off">Offline</span>{% endif %}</td>
+  <td style="text-align:right">
+    {% if not d.revoked %}
+    <div class="chips" style="justify-content:flex-end">
+      <details><summary class="chip plain">Edit</summary>
+        <form class="inline-form picker" hx-post="/admin/devices/{{ d.id }}/edit" hx-target="#flash">
+          <select name="device_type" aria-label="Type">{% for t in ['phone','computer','tablet','other'] %}<option value="{{ t }}" {% if d.type == t %}selected{% endif %}>{{ t|capitalize }}</option>{% endfor %}</select>
+          <input name="nickname" value="{{ d.nickname or '' }}" placeholder="Nickname" aria-label="Nickname" maxlength="60">
+          <button class="chip primary" type="submit">Save</button>
+        </form>
+      </details>
+      <button class="chip danger" hx-post="/admin/devices/{{ d.id }}/revoke" hx-target="#flash" hx-confirm="Revoke {{ d.label }}? It loses access and its session is disconnected.">Revoke</button>
+    </div>
+    {% endif %}
+  </td>
+</tr>
+{% endfor %}
+</tbody></table></div>
+{% endif %}

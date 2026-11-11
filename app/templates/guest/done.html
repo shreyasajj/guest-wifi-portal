@@ -1,0 +1,10 @@
+{% extends "guest/base.html" %}
+{% block card %}
+<h1>{% if already %}Welcome back{% else %}All set!{% endif %}</h1>
+<div class="form">
+  <div class="big-check" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
+  <p class="ttl">You're online{% if name %}, {{ name }}{% endif %}.</p>
+  <p class="muted">{% if device %}<b>{{ device.label }}</b> is connected. {% endif %}This device will be recognized next time you visit, so you won't need to sign in again.</p>
+  <div class="dots" aria-hidden="true"><i></i><i></i><i class="on"></i></div>
+</div>
+{% endblock %}

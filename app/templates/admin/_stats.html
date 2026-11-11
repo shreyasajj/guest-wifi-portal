@@ -1,0 +1,6 @@
+<div class="stats">
+  <div class="stat"><span>Guests home</span><b>{{ s.guests_home }}</b>{% if s.guests_home_names %}<small class="sub">{{ s.guests_home_names|join(', ') }}</small>{% endif %}</div>
+  <div class="stat"><span>Devices online</span><b>{{ s.devices_online }}<small style="font-size:1rem;color:var(--muted)"> / {{ s.devices }}</small></b></div>
+  <div class="stat"><span>People</span><b>{{ s.people }}</b></div>
+  <div class="stat"><span>Unidentified</span><b {% if s.unidentified %}style="color:var(--warn)"{% endif %}>{{ s.unidentified }}</b>{% if s.unidentified %}<a href="/admin/unidentified">Review</a>{% endif %}</div>
+</div>

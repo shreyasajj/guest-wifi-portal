@@ -1,0 +1,35 @@
+{% extends "admin/base.html" %}
+{% block main %}
+<section class="panel">
+  <div class="panel-h"><h2>Audit log</h2><span class="sub">{{ total }} entr{{ 'y' if total == 1 else 'ies' }}</span>
+    <div class="actions">
+      <a class="chip {{ 'plain' if review else 'primary' }}" href="/admin/audit" style="text-decoration:none">All</a>
+      <a class="chip {{ 'primary' if review else 'plain' }}" href="/admin/audit?review=1" style="text-decoration:none">Needs review</a>
+    </div>
+  </div>
+  {% if not rows %}<div class="empty">No entries.</div>{% else %}
+  <div class="table-wrap"><table>
+  <thead><tr><th>Time (UTC)</th><th>Action</th><th>Actor</th><th>Target</th><th>Details</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+  <tr>
+    <td class="mono">{{ r.at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+    <td>{% if r.needs_review %}<span class="pill warn">review</span> {% endif %}{{ r.action.replace('_', ' ') }}</td>
+    <td>{{ r.actor }}</td>
+    <td class="mono">{{ r.target or '' }}</td>
+    <td class="mono" style="max-width:420px;white-space:normal;word-break:break-word">{% for k, v in r.detail.items() if v not in (None, '', []) %}{{ k }}={{ v }}{% if not loop.last %} · {% endif %}{% endfor %}</td>
+  </tr>
+  {% endfor %}
+  </tbody></table></div>
+  {% endif %}
+  {% if pages > 1 %}
+  <div class="panel-h" style="border-top:1px solid var(--line);border-bottom:0">
+    <span class="sub">Page {{ page }} of {{ pages }}</span>
+    <div class="actions">
+      {% if page > 1 %}<a class="chip plain" style="text-decoration:none" href="?page={{ page - 1 }}&review={{ review }}">Newer</a>{% endif %}
+      {% if page < pages %}<a class="chip plain" style="text-decoration:none" href="?page={{ page + 1 }}&review={{ review }}">Older</a>{% endif %}
+    </div>
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

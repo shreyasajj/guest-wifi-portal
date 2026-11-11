@@ -1,0 +1,9 @@
+[Unit]
+Description=Pull and restart the guest Wi-Fi portal if a new image was published
+Wants=network-online.target
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+# Change to wherever you cloned the repo.
+ExecStart=/opt/guest-wifi-portal/deploy/update.sh

@@ -1,0 +1,25 @@
+{% extends "guest/base.html" %}
+{% block card %}
+<h1>Welcome!</h1>
+<form class="form" method="post" action="/login" data-once novalidate>
+  <p class="ttl">Let's get you online</p>
+  <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+  {% if error %}<div class="alert bad" role="alert">{{ error }}</div>{% endif %}
+  {% if cooldown %}<div class="alert warn" role="status">Please wait a few seconds and try again. You can try again in <b data-countdown="{{ cooldown }}">{{ cooldown }}s</b>.</div>{% endif %}
+  {% if locked %}<div class="alert warn" role="status">Too many attempts. You can try again in <b data-countdown="{{ locked }}">{{ locked }}s</b>.</div>{% endif %}
+  <div class="field">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M11 18h2"/></svg>
+    <div><label for="phone">Phone number</label>
+      <input id="phone" name="phone" type="tel" inputmode="tel" autocomplete="tel" required value="{{ phone or '' }}" placeholder="(415) 555‑0142"></div>
+  </div>
+  <div class="field">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M12 11V7M12 4.5v.01M4 15c2.5 1.5 5.5 1.5 8 0s5.5-1.5 8 0"/></svg>
+    <div><label for="birthday">Birth date</label>
+      <input id="birthday" name="birthday" type="date" autocomplete="bday" required value="{{ birthday or '' }}" max="{{ today }}"></div>
+  </div>
+  <button class="btn" type="submit" {% if cooldown or locked %}data-countdown-enable disabled{% endif %}>Let's go</button>
+  <div class="dots" aria-hidden="true"><i class="on"></i><i></i><i></i></div>
+  <p class="note">This device will be recognized on this network.</p>
+</form>
+{% endblock %}
+{% block footer %}Ask your host if you have trouble connecting.{% endblock %}

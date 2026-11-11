@@ -1,0 +1,12 @@
+{% extends "admin/base.html" %}
+{% block main %}
+<section class="panel">
+  <div class="panel-h"><h2>Pending approvals</h2><span class="sub">Guests whose contact has no birthday on file</span></div>
+  <div id="pending" hx-get="/admin/partials/pending" hx-trigger="load, refresh from:body, sse:approval_requested, sse:approval_resolved, every 30s"><div class="empty">Loading…</div></div>
+</section>
+<div id="stats" hx-get="/admin/partials/stats" hx-trigger="load, refresh from:body, sse:person_home, sse:person_away, sse:device_online, sse:device_offline, sse:new_device, sse:device_revoked, sse:unidentified_device, sse:approval_requested, sse:approval_resolved"></div>
+<section class="panel">
+  <div class="panel-h"><h2>Recent activity</h2><span class="sub">Live</span></div>
+  <div hx-get="/admin/partials/feed" hx-trigger="load, refresh from:body, sse:person_home, sse:person_away, sse:device_online, sse:device_offline, sse:new_device, sse:device_revoked, sse:person_revoked, sse:unidentified_device, sse:approval_requested, sse:approval_resolved"></div>
+</section>
+{% endblock %}
