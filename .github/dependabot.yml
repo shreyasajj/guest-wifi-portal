@@ -1,0 +1,26 @@
+# Weekly dependency PRs. CI merges them on its own once "CI passed" is green
+# (job "Merge Dependabot PR" in workflows/ci.yml), which then publishes a release.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /
+    schedule: { interval: weekly, day: monday, time: "06:00" }
+    open-pull-requests-limit: 5
+    groups:
+      python-minor-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly, day: monday, time: "06:00" }
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: docker
+    directory: /
+    schedule: { interval: weekly, day: monday, time: "06:00" }
+    ignore:
+      # Moving to a new Python minor (3.12 -> 3.13) is a deliberate change: the tests run on 3.12.
+      - dependency-name: python
+        update-types: [version-update:semver-minor, version-update:semver-major]
