@@ -1,0 +1,7 @@
+{% extends "admin/base.html" %}
+{% block main %}
+<section class="panel">
+  <div class="panel-h"><h2>People</h2><span class="sub">Home/away follows each person's phone</span></div>
+  <div hx-get="/admin/partials/people" hx-trigger="load, refresh from:body, sse:person_home, sse:person_away, sse:new_device, sse:device_revoked, sse:person_revoked, sse:person_unblocked, sse:device_updated, sse:device_online, sse:device_offline"><div class="empty">Loading…</div></div>
+</section>
+{% endblock %}

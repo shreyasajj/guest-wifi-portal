@@ -1,0 +1,10 @@
+{% extends "guest/base.html" %}
+{% block card %}
+<h1>One moment</h1>
+<div class="form" data-poll="/waiting/status">
+  <p class="ttl">Waiting for approval…</p>
+  <div class="spinner" role="progressbar" aria-label="Waiting for approval"></div>
+  <p class="muted">Your host has been asked to let you in. Keep this page open; it continues on its own.</p>
+  <div class="dots" aria-hidden="true"><i class="on"></i><i></i><i></i></div>
+</div>
+{% endblock %}

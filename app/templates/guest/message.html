@@ -1,0 +1,9 @@
+{% extends "guest/base.html" %}
+{% block card %}
+<h1>{{ heading or "Hmm…" }}</h1>
+<div class="form">
+  <p class="ttl">{{ message }}</p>
+  {% if detail %}<p class="muted">{{ detail }}</p>{% endif %}
+  <a class="btn" href="/">Try again</a>
+</div>
+{% endblock %}

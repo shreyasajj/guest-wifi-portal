@@ -1,0 +1,7 @@
+{% extends "admin/base.html" %}
+{% block main %}
+<section class="panel">
+  <div class="panel-h"><h2>Unidentified devices</h2><span class="sub">Allowed in OPNsense or holding a session, but not in this portal's records</span></div>
+  <div hx-get="/admin/partials/unidentified" hx-trigger="load, refresh from:body, sse:unidentified_device, sse:new_device"><div class="empty">Loading…</div></div>
+</section>
+{% endblock %}

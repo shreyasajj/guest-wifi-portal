@@ -1,0 +1,59 @@
+{% if not requests %}
+<div class="empty">No one is waiting. New requests appear here instantly.</div>
+{% else %}
+<div class="approvals">
+{% for r in requests %}
+  {% set uids = r.contact_uids %}
+  <article class="approval">
+    <div class="chips">
+      <span class="who">{{ r.contact_name }}</span>
+      {% if uids|length > 1 %}<span class="pill warn">{{ uids|length }} contacts match</span>{% endif %}
+      <span class="exp">expires in {{ r.expires_at|until }}</span>
+    </div>
+    <div class="meta">
+      <span>Entered birthday <b>{{ r.entered_birthday }}</b></span>
+      <span>{{ r.user_agent|device_hint }}</span>
+      <span class="mono">{{ r.mac }}</span>
+      <span class="mono">{{ r.client_ip }}</span>
+      <span>{{ r.created_at|ago }}</span>
+    </div>
+    <div class="chips">
+      {% if uids|length > 1 %}
+      <details>
+        <summary class="chip primary">Approve…</summary>
+        <form class="picker" hx-post="/admin/approvals/{{ r.id }}/resolve" hx-target="#flash">
+          <input type="hidden" name="decision" value="approve">
+          <b>Which contact gets the birthday?</b>
+          {% for uid in uids %}{% set c = names.get(uid) %}
+          <label><input type="radio" name="contact_uid" value="{{ uid }}" {% if loop.first %}checked{% endif %}>
+            {{ c.display_name if c else uid }}{% if c and c.phones %} · <span class="mono">{{ c.phones|join(', ') }}</span>{% endif %}{% if c and c.emails %} · {{ c.emails[0] }}{% endif %}</label>
+          {% endfor %}
+          <div><button class="chip primary" type="submit">Approve and save birthday</button></div>
+        </form>
+      </details>
+      {% else %}
+      <button class="chip primary" hx-post="/admin/approvals/{{ r.id }}/resolve" hx-vals='{"decision":"approve"}' hx-target="#flash">Approve</button>
+      {% endif %}
+      <button class="chip soft" hx-post="/admin/approvals/{{ r.id }}/resolve" hx-vals='{"decision":"approve_no_save"}' hx-target="#flash">Approve without saving birthday</button>
+      <button class="chip danger" hx-post="/admin/approvals/{{ r.id }}/resolve" hx-vals='{"decision":"deny"}' hx-target="#flash">Deny</button>
+    </div>
+  </article>
+{% endfor %}
+</div>
+{% endif %}
+{% if recent %}
+<div class="table-wrap"><table>
+  <thead><tr><th>Recently decided</th><th>Result</th><th>By</th><th>When</th><th>Notes</th></tr></thead>
+  <tbody>
+  {% for r in recent %}
+  <tr>
+    <td>{{ r.contact_name }}</td>
+    <td><span class="pill {{ 'ok' if r.status.startswith('approved') else ('bad' if r.status == 'denied' else 'off') }}">{{ r.status.replace('_', ' ') }}</span></td>
+    <td>{{ (r.decided_by or '').replace('_', ' ') }}</td>
+    <td>{{ r.decided_at|ago }}</td>
+    <td>{% if r.error %}<span class="review">{{ r.error }}</span>{% elif r.note %}<span class="review">{{ r.note }}</span>{% endif %}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+{% endif %}
