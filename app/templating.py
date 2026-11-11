@@ -10,7 +10,8 @@ from .scene import scene_svg
 from .security import csrf_token
 
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
-templates.env.globals.update(csrf_token=csrf_token, scene=scene_svg())
+templates.env.globals.update(csrf_token=csrf_token, scene=scene_svg(),
+                             admin_scene=scene_svg("a", moon_x=930, moon_y=445))
 
 
 def _ago(value: datetime | None) -> str:
