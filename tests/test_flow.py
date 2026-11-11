@@ -76,7 +76,7 @@ def test_approval_flow_via_api(guest, ha, dav, opn):
 
     assert guest.get("/waiting/status").json() == {"state": "approved", "next": "/device"}
     page = guest.get("/device")
-    r = guest.post("/device", data={"device_type": "tablet", "csrf_token": csrf(page.text)})
+    r = guest.post("/device", data={"device_type": "other", "csrf_token": csrf(page.text)})
     assert "All set!" in r.text and opn.allowed == [GUEST_MAC]
 
 
@@ -108,14 +108,18 @@ def test_one_phone_rule_over_http(app, dav, opn, session):
             login(c)
             page = c.get("/device")
             r = c.post("/device", data={"device_type": "phone", "csrf_token": csrf(page.text)})
-    assert "Replace your existing phone?" in r.text
-    with TestClient(app, client=("10.0.20.61", 1)) as c:
-        login(c)
-        tok = csrf(c.get("/device").text)
-        r = c.post("/device?replace=1", data={"device_type": "phone", "csrf_token": tok})
-    assert "All set!" in r.text
+            assert "All set!" in r.text  # no prompt: the newest phone takes over tracking
     types = {d.mac: d.type for d in session.exec(select(Device)).all()}
     assert types == {"aa:bb:cc:00:00:60": "other", "aa:bb:cc:00:00:61": "phone"}
+    assert sorted(opn.allowed) == ["aa:bb:cc:00:00:60", "aa:bb:cc:00:00:61"]  # old phone keeps access
+
+
+def test_device_page_offers_only_phone_or_other(guest, dav):
+    dav.add("u1", "Maya", ["+14155550142"], "1991-04-12")
+    login(guest)
+    page = guest.get("/device").text
+    assert 'value="phone"' in page and 'value="other"' in page
+    assert 'value="computer"' not in page and 'value="tablet"' not in page
 
 
 def test_api_auth_and_network_restriction(app):

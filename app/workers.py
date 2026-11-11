@@ -172,6 +172,8 @@ async def run_reconcile(services) -> ReconcilePlan:
 
 # ============================================================ MAC expiry
 async def run_mac_expiry(services, now: datetime | None = None) -> list[str]:
+    if services.settings.mac_expiry_days <= 0:
+        return []
     now = now or utcnow()
     cutoff = now - timedelta(days=services.settings.mac_expiry_days)
     expired = []

@@ -82,7 +82,7 @@ class Settings(BaseSettings):
     away_grace_seconds: int = 300
     reconcile_seconds: int = 60
     approval_expiry_check_seconds: int = 5
-    mac_expiry_days: int = 30
+    mac_expiry_days: int = 0  # 0 = never remove devices that haven't been seen
     event_retention_days: int = 14
 
     @property

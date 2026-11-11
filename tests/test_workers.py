@@ -90,7 +90,18 @@ async def test_presence_grace_period_and_person_events(services, session):
     assert not session.get(Person, "u1").home
 
 
+async def test_mac_expiry_off_by_default(services, session, opn):
+    assert services.settings.mac_expiry_days == 0
+    old = utcnow() - timedelta(days=400)
+    session.add(dev(A, first_seen=old, last_seen=old))
+    session.commit()
+    opn.allowed = [A]
+    assert await run_mac_expiry(services) == []
+    assert opn.allowed == [A]
+
+
 async def test_mac_expiry_removes_stale(services, session, opn):
+    services.settings.mac_expiry_days = 30
     old = utcnow() - timedelta(days=31)
     session.add(dev(A, first_seen=old, last_seen=old))
     session.add(dev(B, last_seen=utcnow()))
