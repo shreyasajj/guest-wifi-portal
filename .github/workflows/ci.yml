@@ -6,6 +6,12 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      bump:
+        description: Version part to bump for the release
+        type: choice
+        options: [patch, minor, major]
+        default: patch
 
 permissions:
   contents: read
@@ -69,31 +75,91 @@ jobs:
           echo '${{ toJSON(needs) }}'
           [ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}" = "false" ]
 
-  publish:
-    name: Publish image
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+  # Dependabot PRs merge themselves once every check passed.
+  automerge:
+    name: Merge Dependabot PR
+    if: github.event_name == 'pull_request' && github.event.pull_request.user.login == 'dependabot[bot]'
     needs: [ci-ok]
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
+      pull-requests: write
+      actions: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+      PR: ${{ github.event.pull_request.number }}
+    steps:
+      - name: Merge, or ask Dependabot to rebase if main moved on
+        run: |
+          state=$(gh pr view "$PR" --json mergeStateStatus --jq .mergeStateStatus)
+          echo "merge state: $state"
+          if [ "$state" = "BEHIND" ]; then
+            gh pr comment "$PR" --body "@dependabot rebase"
+            exit 0
+          fi
+          gh pr merge "$PR" --merge --delete-branch
+          # A merge made with GITHUB_TOKEN doesn't start a push run, so start the release run on main.
+          gh workflow run ci.yml --ref main
+
+  publish:
+    name: Publish image and release
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: [ci-ok]
+    runs-on: ubuntu-latest
+    concurrency:
+      group: release
+      cancel-in-progress: false
+    permissions:
+      contents: write
       packages: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v5
-      - uses: docker/setup-qemu-action@v3
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
+        with:
+          fetch-depth: 0
+      - name: Next version
+        id: version
+        env:
+          BUMP: ${{ inputs.bump || 'patch' }}
+        run: |
+          last=$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -1)
+          if [ -z "$last" ]; then
+            next=0.1.0
+          elif git tag --points-at HEAD | grep -qx "$last"; then
+            echo "HEAD is already released as $last"; echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0
+          else
+            IFS=. read -r major minor patch <<< "${last#v}"
+            case "$BUMP" in
+              major) next="$((major + 1)).0.0" ;;
+              minor) next="$major.$((minor + 1)).0" ;;
+              *)     next="$major.$minor.$((patch + 1))" ;;
+            esac
+          fi
+          echo "version=$next" >> "$GITHUB_OUTPUT"
+          echo "Releasing v$next (previous: ${last:-none})"
+      - if: steps.version.outputs.skip != 'true'
+        uses: docker/setup-qemu-action@v3
+      - if: steps.version.outputs.skip != 'true'
+        uses: docker/setup-buildx-action@v3
+      - if: steps.version.outputs.skip != 'true'
+        uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - id: meta
+      - if: steps.version.outputs.skip != 'true'
+        id: meta
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.IMAGE }}
           tags: |
             type=raw,value=latest
+            type=raw,value=${{ steps.version.outputs.version }}
             type=sha,format=short
-      - uses: docker/build-push-action@v6
+      - if: steps.version.outputs.skip != 'true'
+        uses: docker/build-push-action@v6
         with:
           context: .
           platforms: linux/amd64,linux/arm64
@@ -102,3 +168,10 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - name: GitHub release
+        if: steps.version.outputs.skip != 'true'
+        env:
+          V: ${{ steps.version.outputs.version }}
+        run: |
+          gh release create "v$V" --target "$GITHUB_SHA" --title "v$V" --generate-notes \
+            --notes "Image: \`${IMAGE}:$V\`"

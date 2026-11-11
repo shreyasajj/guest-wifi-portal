@@ -279,9 +279,18 @@ To build from your checkout instead of pulling: `docker compose -f docker-compos
 
 ```
 pull request ──> CI: tests · Docker build + smoke test ──> "CI passed" (required to merge)
-merge to main ─> CI again ──> publish ghcr.io/<you>/guest-wifi-portal:latest and :sha-xxxxxxx
+merge to main ─> CI again ──> release vX.Y.Z + image :latest, :X.Y.Z, :sha-xxxxxxx on GHCR
 server ────────> deploy/update.sh every 5 min: pull, restart only if the image changed
 ```
+
+**Dependency updates and releases (already set up):**
+
+- **Dependabot** (`.github/dependabot.yml`) opens PRs every Monday for Python packages (minor and patch grouped into one PR), GitHub Actions and the Docker base image. Security updates are on too, so a vulnerable dependency gets a PR as soon as an advisory is published.
+- **Auto-merge:** on a Dependabot PR, the **Merge Dependabot PR** job runs after **CI passed** and merges it. If `main` moved on in the meantime, it comments `@dependabot rebase`, CI runs again on the rebased PR, and it merges after that. A Dependabot PR that fails CI stays open for you to look at.
+- **Releases:** every merge to `main` (yours or Dependabot's) creates a GitHub release with notes generated from the merged PRs, and pushes the image as `:latest` and `:X.Y.Z`. The version bumps the patch number. For a minor or major release: **Actions > CI > Run workflow**, pick `minor` or `major`.
+- The Python version in the Docker image stays on 3.12 until you change it. Dependabot ignores Python minor-version bumps of the base image because the tests run on 3.12.
+
+The server's timer pulls `:latest`, so a merged Dependabot PR is live within about 10 minutes.
 
 **1. Create the repo and push** (from this folder):
 
