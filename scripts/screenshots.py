@@ -101,13 +101,9 @@ class Shooter:
         await self.settle(page)
         await self.shot(page, "guest-login")
 
-        # Maya has a birthday and already a phone: device page, then the one-phone prompt.
+        # Maya has a birthday: device page.
         await self.guest_login(page, "(415) 555-0134", "1991-04-12")
         await self.shot(page, "guest-device")
-        await page.check("#t-phone", force=True)
-        await page.click("form[action='/device'] button[type=submit]")
-        await self.settle(page)
-        await self.shot(page, "guest-replace")
 
         # Lena has no birthday: waiting for approval.
         await self.guest_login(page, "415 555 0175", "1997-09-14")

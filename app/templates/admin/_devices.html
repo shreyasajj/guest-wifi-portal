@@ -17,7 +17,7 @@
     <div class="chips" style="justify-content:flex-end">
       <details><summary class="chip plain">Edit</summary>
         <form class="inline-form picker" hx-post="/admin/devices/{{ d.id }}/edit" hx-target="#flash">
-          <select name="device_type" aria-label="Type">{% for t in ['phone','computer','tablet','other'] %}<option value="{{ t }}" {% if d.type == t %}selected{% endif %}>{{ t|capitalize }}</option>{% endfor %}</select>
+          <select name="device_type" aria-label="Type">{% for t in ['phone','other'] %}<option value="{{ t }}" {% if d.type == t %}selected{% endif %}>{{ t|capitalize }}</option>{% endfor %}</select>
           <input name="nickname" value="{{ d.nickname or '' }}" placeholder="Nickname" aria-label="Nickname" maxlength="60">
           <button class="chip primary" type="submit">Save</button>
         </form>

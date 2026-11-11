@@ -44,7 +44,7 @@ async def test_replace_demotes_old_phone_but_keeps_access(services, session, opn
 
 async def test_non_phone_devices_never_conflict(services, session):
     await reg(services, session, OLD)
-    r = await reg(services, session, LAPTOP, DeviceType.computer)
+    r = await reg(services, session, LAPTOP, DeviceType.other)
     assert isinstance(r, Registered)
 
 
@@ -63,7 +63,7 @@ async def test_revoke_device_removes_mac_and_session(services, session, opn):
 
 async def test_revoke_person_blocks_future_logins(services, session, opn):
     await reg(services, session, OLD)
-    await reg(services, session, LAPTOP, DeviceType.computer)
+    await reg(services, session, LAPTOP, DeviceType.other)
     from app.models import Person
 
     p = session.get(Person, "u1")

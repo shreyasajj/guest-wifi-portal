@@ -32,11 +32,10 @@ A self-hosted login page for the guest Wi‑Fi. Guests sign in with their phone 
 
 <img src="docs/screenshots/admin-audit.png" width="780" alt="Audit log page">
 
-**Admin sign-in**, the **one-phone rule** prompt, and the guest page in **light mode** (it follows the device setting):
+**Admin sign-in** and the guest page in **light mode** (it follows the device setting):
 
 <p>
   <img src="docs/screenshots/admin-login.png" width="520" alt="Admin sign-in">
-  <img src="docs/screenshots/guest-replace.png" width="150" alt="Replace your existing phone prompt">
   <img src="docs/screenshots/guest-login-light.png" width="150" alt="Guest sign-in in light mode">
 </p>
 
@@ -91,9 +90,9 @@ The Home Assistant integration lives in its own repo, [ha-guest-wifi-portal](htt
    | none | rejected |
 
    Guests only ever see a generic message, never which case applied.
-4. They pick a device type (Phone, Computer, Tablet, Other). Each person has **one** phone, and that phone drives their home/away status.
+4. They pick **Phone** or **Other**. Each person has **one** tracked phone, and it drives their home/away status. Registering a new phone makes it the tracked one automatically; the old phone becomes **Other** and keeps its access.
 5. The MAC goes into the captive portal zone's allowed MACs and/or the `GUEST_AUTH_MACS` alias. Your firewall rules give that alias the extra access you choose.
-6. Background workers track presence, reconcile OPNsense with the database, expire stale MACs and approvals, and push events to Home Assistant.
+6. Background workers track presence, reconcile OPNsense with the database, expire approvals, and push events to Home Assistant.
 
 ---
 
@@ -317,6 +316,8 @@ docker compose logs -f
 
 The SQLite database lives in the `portal-data` volume. The container runs one worker on purpose: the live-event bus and the OPNsense write locks are in-process.
 
+If you use a bind mount instead (e.g. `./data:/data`), that's fine: the container starts as root just long enough to make the folder writable by its app user (uid 10001), then drops privileges. If you also set `user:` in compose, it can't do that, so it stops with a clear message instead. Run `sudo chown -R 10001:10001 ./data` on the host. Without this fix you'd see `sqlite3.OperationalError: unable to open database file`.
+
 To build from your checkout instead of pulling: `docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build`.
 
 ### GitHub, CI and automatic deploys
@@ -390,7 +391,7 @@ Changes to `docker-compose.yml` itself aren't picked up by the timer. After edit
 | Presence | `PRESENCE_POLL_SECONDS` (30 s) | ARP on the guest interface plus recently renewed DHCP leases. A device is online immediately and offline after `AWAY_GRACE_SECONDS` (5 min). A person is home while their phone is online. |
 | Reconciler | `RECONCILE_SECONDS` (60 s) | Re-adds authorized MACs that vanished from OPNsense, removes revoked ones, disconnects sessions of revoked devices, and lists unknown MACs/sessions as **Unidentified**. |
 | Approval expiry | 5 s | Marks pending requests past `expires_at` as expired. The guest sees "Couldn't connect, try again later." |
-| Housekeeping | 1 h | Revokes devices not seen for `MAC_EXPIRY_DAYS` and prunes old events. |
+| Housekeeping | 1 h | Prunes old events. If `MAC_EXPIRY_DAYS` is above 0, also revokes devices not seen for that many days (off by default). |
 
 **ARP caveat:** FreeBSD keeps ARP entries for up to 20 minutes, so a phone that just left can still look present for a while. The grace period hides short sleeps but not that. If you need tighter presence, the **UniFi controller's client list** is the most accurate source: APs report association and disassociation within seconds. Options:
 
@@ -459,7 +460,7 @@ Modern phones use a private ("randomized") MAC for each network. This portal ide
 | Windows 10/11 | Wi‑Fi > network > **Random hardware addresses**: Off / On / **Change daily** | On = stable for this SSID. Change daily = new MAC every day. | On, not "Change daily" |
 | ChromeOS, Linux | usually stable per network | | |
 
-The admin page tags locally-administered (randomized) addresses as **private**. Old MACs don't pile up: devices not seen for `MAC_EXPIRY_DAYS` (30) are removed from OPNsense and marked **Expired**.
+The admin page tags locally-administered (randomized) addresses as **private**. By default devices are never removed for being away: they keep access until you revoke them. If old MACs start piling up, set `MAC_EXPIRY_DAYS` (e.g. `30`) and devices not seen for that long are removed from OPNsense and marked **Expired**.
 
 ---
 

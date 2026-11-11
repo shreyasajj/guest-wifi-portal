@@ -9,16 +9,16 @@
     <legend class="sr">Device type</legend>
     {% set icons = {
       'phone': '<rect x="7" y="2" width="10" height="20" rx="2.5"/><path d="M11 18h2"/>',
-      'computer': '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M2 20h20"/>',
-      'tablet': '<rect x="4" y="2" width="16" height="20" rx="2.5"/><path d="M11 18h2"/>',
       'other': '<circle cx="12" cy="12" r="9"/><path d="M8 12h.01M12 12h.01M16 12h.01"/>'} %}
-    {% for t in ['phone','computer','tablet','other'] %}
+    {% for t in ['phone','other'] %}
     <div class="tile">
       <input type="radio" name="device_type" id="t-{{ t }}" value="{{ t }}" {% if (device_type or 'phone') == t %}checked{% endif %}>
       <label for="t-{{ t }}"><svg viewBox="0 0 24 24" aria-hidden="true">{{ icons[t]|safe }}</svg>{{ t|capitalize }}</label>
     </div>
     {% endfor %}
   </fieldset>
+  <p class="muted">Your phone is how we know you've arrived, so we can make you feel at home. Choose <b>Phone</b> if this is the one you carry with you. Laptops, tablets and everything else go under <b>Other</b> and get the same Wi‑Fi.</p>
+  <p class="note">Only your most recent phone is used for this. Older phones stay connected.</p>
   <div class="field"><div><label for="nickname">Nickname (optional)</label>
     <input id="nickname" name="nickname" maxlength="60" value="{{ nickname or '' }}" placeholder="{{ first_name }}'s phone"></div></div>
   <button class="btn" type="submit">Finish</button>

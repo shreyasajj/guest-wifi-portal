@@ -24,9 +24,7 @@ def iso(value: datetime | None) -> str | None:
 
 
 class DeviceType(str, Enum):
-    phone = "phone"
-    computer = "computer"
-    tablet = "tablet"
+    phone = "phone"  # the one device per person that drives home/away
     other = "other"
 
 

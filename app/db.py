@@ -3,7 +3,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from typing import Iterator
 
-from sqlalchemy import event
+from sqlalchemy import event, text
 from sqlmodel import Session, SQLModel, create_engine
 
 from . import models  # noqa: F401  (register tables)
@@ -24,6 +24,8 @@ def init_engine(url: str):
             cur.execute("PRAGMA busy_timeout=5000")
             cur.close()
     SQLModel.metadata.create_all(_engine)
+    with _engine.begin() as conn:  # Computer/Tablet were folded into Other
+        conn.execute(text("UPDATE device SET type = 'other' WHERE type NOT IN ('phone', 'other')"))
     return _engine
 
 

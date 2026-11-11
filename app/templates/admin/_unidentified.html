@@ -15,7 +15,7 @@
         <option value="">Choose a contact…</option>
         {% for c in contacts %}<option value="{{ c.uid }}">{{ c.display_name }}{% if c.phones %} · {{ c.phones[0] }}{% endif %}</option>{% endfor %}
       </select>
-      <select name="device_type" aria-label="Type">{% for t in ['phone','computer','tablet','other'] %}<option value="{{ t }}" {% if t == 'other' %}selected{% endif %}>{{ t|capitalize }}</option>{% endfor %}</select>
+      <select name="device_type" aria-label="Type">{% for t in ['phone','other'] %}<option value="{{ t }}" {% if t == 'other' %}selected{% endif %}>{{ t|capitalize }}</option>{% endfor %}</select>
       <input name="nickname" placeholder="Nickname" aria-label="Nickname" maxlength="60" size="12">
       <button class="chip primary" type="submit">Adopt</button>
     </form>

@@ -66,9 +66,9 @@ def contact(uid):
 async def seed(svc):
     devices = [
         ("maya", "3a:1f:9c:22:7b:01", "10.0.20.41", DeviceType.phone, "Maya's iPhone", True),
-        ("maya", "3a:1f:9c:22:7b:02", "10.0.20.42", DeviceType.computer, "Work laptop", True),
+        ("maya", "3a:1f:9c:22:7b:02", "10.0.20.42", DeviceType.other, "Work laptop", True),
         ("jordan", "5e:88:04:c1:93:10", "10.0.20.57", DeviceType.phone, None, True),
-        ("jordan", "5e:88:04:c1:93:11", "10.0.20.58", DeviceType.tablet, "iPad", False),
+        ("jordan", "5e:88:04:c1:93:11", "10.0.20.58", DeviceType.other, "iPad", False),
         ("alex", "be:12:7d:a0:66:31", "10.0.20.63", DeviceType.phone, "Pixel", False),
         ("priya", "c6:40:2e:91:0a:55", "10.0.20.70", DeviceType.phone, None, False),
     ]

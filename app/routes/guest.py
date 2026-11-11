@@ -12,7 +12,7 @@ from sqlmodel import Session, select
 from ..approvals import Cooldown
 from ..carddav import CardDAVError
 from ..db import get_session
-from ..devices import PersonBlocked, PhoneConflict
+from ..devices import PersonBlocked
 from ..events import audit
 from ..matching import Contact, Outcome, evaluate, normalize_phone
 from ..models import ApprovalRequest, ApprovalStatus, Device, DeviceType, Person
@@ -217,7 +217,7 @@ async def device_form(request: Request, session: Session = Depends(get_session))
 
 @router.post("/device", dependencies=[Depends(csrf_protect)])
 async def device_submit(request: Request, device_type: str = Form("other"), nickname: str = Form(""),
-                        replace: int = 0, session: Session = Depends(get_session)):
+                        session: Session = Depends(get_session)):
     svc = _svc(request)
     v = _verified(request)
     if not v:
@@ -238,7 +238,7 @@ async def device_submit(request: Request, device_type: str = Form("other"), nick
     try:
         result = await svc.devices.register(session, contact=contact, mac=mac, ip=ip, device_type=dtype,
                                             nickname=nickname, user_agent=request.headers.get("user-agent"),
-                                            replace_phone=bool(replace))
+                                            replace_phone=True)  # newest phone is the tracked one
     except PersonBlocked:
         request.session.pop(VERIFIED, None)
         return _render(request, "guest/message.html", 403, heading="Sorry", message="Couldn't connect, try again later.")
@@ -246,7 +246,5 @@ async def device_submit(request: Request, device_type: str = Form("other"), nick
         log.exception("granting access failed")
         return _render(request, "guest/device.html", 503, error=BACKEND, device_type=device_type, nickname=nickname,
                        first_name=contact.display_name.split(" ")[0])
-    if isinstance(result, PhoneConflict):
-        return _render(request, "guest/replace.html", existing=result.existing, nickname=nickname)
     request.session.pop(VERIFIED, None)
     return _render(request, "guest/done.html", device=result.device, name=contact.display_name.split(" ")[0])
