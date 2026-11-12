@@ -212,3 +212,19 @@ def test_blocked_device_never_creates_an_approval(guest, ha, dav, session):
     r = login(guest, phone="(415) 555-0111")
     assert r.status_code == 401
     assert session.exec(select(ApprovalRequest)).all() == []
+
+
+def test_api_hides_opnsense_error_details(guest, ha, dav, opn, monkeypatch):
+    from app.opnsense import OPNsenseError
+
+    dav.add("u1", "Maya Chen", ["+14155550142"], "1991-04-12")
+    login(guest)
+    guest.post("/device", data={"device_type": "phone", "csrf_token": csrf(guest.get("/device").text)})
+
+    async def boom(*a, **kw):
+        raise OPNsenseError("GET captiveportal/settings/get_zone/123: HTTP 500 secret internals")
+    monkeypatch.setattr(ha.app.state.services.access, "remove", boom)
+    r = ha.post(f"/api/devices/{GUEST_MAC}/revoke")
+    assert r.status_code == 502
+    assert "secret internals" not in r.text and "get_zone" not in r.text
+    assert "OPNsense request failed" in r.text
