@@ -14,7 +14,7 @@ log = logging.getLogger(__name__)
 
 EVENT_TYPES = {
     "person_home", "person_away", "device_online", "device_offline", "new_device",
-    "device_revoked", "person_revoked", "person_unblocked", "unidentified_device",
+    "device_revoked", "person_revoked", "person_unblocked", "person_removed", "unidentified_device",
     "approval_requested", "approval_resolved", "device_updated",
 }
 

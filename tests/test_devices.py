@@ -81,3 +81,32 @@ async def test_adopt_phone_replaces_without_asking(services, session):
     r = await services.devices.adopt(session, mac=NEW, contact=MAYA, device_type=DeviceType.phone, nickname="Pixel",
                                      actor="admin")
     assert r.demoted.mac == OLD and r.device.nickname == "Pixel"
+
+
+async def test_revoking_last_device_removes_person(services, session, opn):
+    from app.models import Person
+
+    await reg(services, session, OLD)
+    r = await reg(services, session, LAPTOP, DeviceType.other)
+    await services.devices.revoke_device(session, r.device, actor="admin")
+    assert session.get(Person, "u1") is not None  # phone still active
+    phone = session.exec(select(Device).where(Device.mac == OLD)).one()
+    await services.devices.revoke_device(session, phone, actor="admin")
+    session.expire_all()
+    assert session.get(Person, "u1") is None
+    assert session.exec(select(Device)).all() == []
+    assert opn.allowed == []
+    # signing in again brings them back
+    assert isinstance(await reg(services, session, NEW), Registered)
+    assert session.get(Person, "u1").display_name == "Maya Chen"
+
+
+async def test_revoke_person_keeps_blocked_person(services, session):
+    from app.models import Person
+
+    await reg(services, session, OLD)
+    p = session.get(Person, "u1")
+    await services.devices.revoke_person(session, p, actor="admin")
+    session.expire_all()
+    assert session.get(Person, "u1").blocked
+    assert session.exec(select(Device).where(Device.mac == OLD)).one().revoked

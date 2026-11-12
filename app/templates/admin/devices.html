@@ -2,6 +2,6 @@
 {% block main %}
 <section class="panel">
   <div class="panel-h"><h2>Devices</h2><span class="sub">Every MAC address you've granted</span></div>
-  <div hx-get="/admin/partials/devices" hx-trigger="load, refresh from:body, sse:new_device, sse:device_revoked, sse:person_revoked, sse:device_online, sse:device_offline, sse:device_updated"><div class="empty">Loading…</div></div>
+  <div hx-get="/admin/partials/devices" hx-trigger="load, refresh from:body, sse:new_device, sse:device_revoked, sse:person_revoked, sse:person_removed, sse:device_online, sse:device_offline, sse:device_updated"><div class="empty">Loading…</div></div>
 </section>
 {% endblock %}

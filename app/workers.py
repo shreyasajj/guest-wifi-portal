@@ -96,18 +96,22 @@ def apply_presence(session: Session, bus, seen: dict[str, Sighting], *, now: dat
 # ============================================================ reconciler
 @dataclass
 class ReconcilePlan:
-    readd: set[str] = field(default_factory=set)          # authorized in DB, missing in OPNsense
+    readd: set[str] = field(default_factory=set)          # authorized in DB, missing in OPNsense (readd mode)
+    revoke: set[str] = field(default_factory=set)         # authorized in DB, missing in OPNsense (revoke mode)
+    held: set[str] = field(default_factory=set)           # missing, but not acted on (see plan_reconcile)
     remove: set[str] = field(default_factory=set)         # revoked in DB, still allowed
     disconnect: list[str] = field(default_factory=list)   # session ids of revoked devices
     unidentified: dict[str, dict] = field(default_factory=dict)  # mac -> {sources, ip, session_id}
 
 
-def plan_reconcile(allowed: dict[str, set[str]], sessions: list[CPSession], devices: list[Device]) -> ReconcilePlan:
+def plan_reconcile(allowed: dict[str, set[str]], sessions: list[CPSession], devices: list[Device],
+                   missing_action: str = "revoke") -> ReconcilePlan:
     plan = ReconcilePlan()
     active = {d.mac for d in devices if not d.revoked}
     revoked = {d.mac for d in devices if d.revoked}
+    missing: set[str] = set()
     for source, macs in allowed.items():
-        plan.readd |= active - macs
+        missing |= active - macs
         plan.remove |= macs & revoked
         for mac in macs - active - revoked:
             entry = plan.unidentified.setdefault(mac, {"sources": set(), "ip": None, "session_id": None})
@@ -122,20 +126,43 @@ def plan_reconcile(allowed: dict[str, set[str]], sessions: list[CPSession], devi
             entry["sources"].add("session")
             entry["ip"] = s.ip or entry["ip"]
             entry["session_id"] = s.session_id
+
+    if missing_action == "readd":
+        plan.readd = missing
+    elif len(active) > 1 and missing == active:
+        # Every device vanished at once: that's a reset or restored zone, not you removing guests.
+        # Don't revoke everyone; leave it for a human to look at.
+        plan.held = missing
+    else:
+        plan.revoke = missing
     return plan
 
 
 async def run_reconcile(services) -> ReconcilePlan:
     access = services.access
-    allowed = await access.allowed()
-    sessions = await access.sessions()
     with session_scope() as session:
+        # Read the DB before OPNsense. Registration writes to OPNsense first and the DB second,
+        # so a device that is in this snapshot is already in the allowed list we read next.
+        # The other order could revoke a guest who signed in between the two reads.
         devices = list(session.exec(select(Device)).all())
-        plan = plan_reconcile(allowed, sessions, devices)
+        allowed = await access.allowed()
+        sessions = await access.sessions()
+        plan = plan_reconcile(allowed, sessions, devices, services.settings.missing_mac_action)
 
         if plan.readd:
             await access.allow(*sorted(plan.readd))
             audit(session, "reconciler_readd", detail={"macs": sorted(plan.readd)})
+        for mac in sorted(plan.revoke):
+            d = session.exec(select(Device).where(Device.mac == mac)).first()
+            if d:
+                session.refresh(d)
+            if d and not d.revoked:  # an admin may have revoked it meanwhile
+                await services.devices.revoke_device(session, d, actor="system",
+                                                     reason="removed from OPNsense allowed MACs")
+        if plan.held:
+            log.warning("every authorized MAC is missing from OPNsense (%d); not revoking, check the zone",
+                        len(plan.held))
+            audit(session, "reconciler_all_missing", detail={"macs": sorted(plan.held)}, needs_review=True)
         if plan.remove:
             if access.use_zone:
                 await access.client.remove_allowed_macs(*plan.remove)

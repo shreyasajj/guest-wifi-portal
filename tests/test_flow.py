@@ -174,3 +174,16 @@ def test_captive_portal_api(guest, dav):
     page = guest.get("/device")
     guest.post("/device", data={"device_type": "phone", "csrf_token": csrf(page.text)})
     assert guest.get("/captive-portal").json()["captive"] is False
+
+
+def test_api_revoke_last_device_removes_person(guest, ha, dav, opn, session):
+    dav.add("u1", "Maya Chen", ["+14155550142"], "1991-04-12")
+    login(guest)
+    guest.post("/device", data={"device_type": "phone", "csrf_token": csrf(guest.get("/device").text)})
+    assert [p["person_uid"] for p in ha.get("/api/people").json()] == ["u1"]
+
+    r = ha.post(f"/api/devices/{GUEST_MAC}/revoke")
+    assert r.status_code == 200 and r.json()["mac"] == GUEST_MAC and r.json()["revoked"] is True
+    assert opn.allowed == []
+    assert ha.get("/api/people").json() == []
+    assert ha.get("/api/devices", params={"include_revoked": True}).json() == []

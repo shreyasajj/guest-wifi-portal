@@ -120,7 +120,9 @@ class DeviceService:
         return Registered(device, demoted)
 
     async def revoke_device(self, session: Session, device: Device, *, actor: str, reason: str = "revoked",
-                            publish: bool = True) -> Device:
+                            publish: bool = True, remove_orphan: bool = True) -> Device:
+        """Revoke one device. If it was the owner's last active device, the owner is removed too
+        (unless they are blocked: the block has to survive so they can't sign in again)."""
         await self.access.remove(device.mac)
         device.revoked = True
         device.revoked_at = utcnow()
@@ -133,13 +135,34 @@ class DeviceService:
         if publish:
             person = session.get(Person, device.person_uid) if device.person_uid else None
             self.bus.publish(session, "device_revoked", device_payload(device, person))
+        if remove_orphan and device.person_uid:
+            self.remove_person_if_orphaned(session, device.person_uid, actor=actor)
         return device
+
+    def remove_person_if_orphaned(self, session: Session, person_uid: str, *, actor: str) -> bool:
+        """Delete a person who has no active devices left, along with their revoked device rows.
+        The audit log keeps the history. Signing in again recreates them from CardDAV."""
+        person = session.get(Person, person_uid)
+        if person is None or person.blocked:
+            return False
+        devices = session.exec(select(Device).where(Device.person_uid == person_uid)).all()
+        if any(not d.revoked for d in devices):
+            return False
+        for d in devices:
+            session.delete(d)
+        session.delete(person)
+        session.commit()
+        audit(session, "person_removed", actor=actor, target=person_uid,
+              detail={"name": person.display_name, "reason": "no devices left",
+                      "devices": [d.mac for d in devices]})
+        self.bus.publish(session, "person_removed", {"person_uid": person_uid, "name": person.display_name})
+        return True
 
     async def revoke_person(self, session: Session, person: Person, *, actor: str) -> list[Device]:
         devices = session.exec(select(Device).where(Device.person_uid == person.contact_uid,
                                                     Device.revoked == False)).all()  # noqa: E712
         for d in devices:
-            await self.revoke_device(session, d, actor=actor, reason="person revoked")
+            await self.revoke_device(session, d, actor=actor, reason="person revoked", remove_orphan=False)
         person.blocked = True
         person.blocked_at = utcnow()
         person.home = False
