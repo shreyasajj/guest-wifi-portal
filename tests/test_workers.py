@@ -202,3 +202,12 @@ async def test_mac_expiry_removes_stale(services, session, opn):
     session.expire_all()
     d = session.exec(select(Device).where(Device.mac == A)).one()
     assert d.revoked and d.revoke_reason.startswith("expired")
+
+
+async def test_blocked_device_added_back_in_opnsense_is_removed_again(services, session, opn):
+    person(session, blocked=True)
+    session.add(dev(A, person_uid="u1", revoked=True))
+    session.commit()
+    opn.allowed = [A]  # someone re-added it by hand in OPNsense
+    plan = await run_reconcile(services)
+    assert plan.remove == {A} and opn.allowed == []

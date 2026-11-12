@@ -19,6 +19,25 @@ class PersonBlocked(Exception):
     pass
 
 
+class DeviceBlocked(PersonBlocked):
+    """The MAC belongs to a blocked person, so nobody may register it until they're unblocked."""
+
+    def __init__(self, mac: str, owner: "Person"):
+        super().__init__(owner.contact_uid)
+        self.mac = mac
+        self.owner = owner
+
+
+def blocked_owner(session: Session, mac: str) -> Person | None:
+    """The blocked person this MAC belongs to, if any. Blocking a person blocks all their devices:
+    without this, their phone could get back on by signing in with someone else's details."""
+    device = session.exec(select(Device).where(Device.mac == mac)).first()
+    if device is None or not device.person_uid:
+        return None
+    owner = session.get(Person, device.person_uid)
+    return owner if owner is not None and owner.blocked else None
+
+
 @dataclass
 class PhoneConflict:
     """The person already has a tracked phone; the guest must confirm replacement."""
@@ -69,6 +88,9 @@ class DeviceService:
     async def register(self, session: Session, *, contact: Contact, mac: str, ip: str | None,
                        device_type: DeviceType, nickname: str | None, user_agent: str | None,
                        replace_phone: bool = False, actor: str = "guest") -> Registered | PhoneConflict:
+        owner = blocked_owner(session, mac)
+        if owner is not None:
+            raise DeviceBlocked(mac, owner)
         person = upsert_person(session, contact)
         if person.blocked:
             raise PersonBlocked(person.contact_uid)
