@@ -14,7 +14,7 @@ from sqlmodel import Session, col, func, select
 from ..approvals import AlreadyResolved, ContactChoiceRequired, NotFound
 from ..carddav import CardDAVError
 from ..db import get_session
-from ..devices import PersonBlocked
+from ..devices import DeviceBlocked, PersonBlocked
 from ..events import audit
 from ..macs import normalize_mac
 from ..matching import Contact
@@ -324,6 +324,8 @@ async def adopt(mac: str, request: Request, contact_uid: str = Form(...), device
     try:
         await svc.devices.adopt(session, mac=mac_n, contact=contact, device_type=dtype, nickname=nickname,
                                 actor=admin["name"])
+    except DeviceBlocked as e:
+        return _flash("bad", f"{mac_n} belongs to {e.owner.display_name}, who is blocked. Unblock them first.", 409)
     except PersonBlocked:
         return _flash("bad", f"{contact.display_name} is blocked. Unblock them first.", 409)
     except OPNsenseError as e:

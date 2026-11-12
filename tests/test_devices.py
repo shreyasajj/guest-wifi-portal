@@ -110,3 +110,36 @@ async def test_revoke_person_keeps_blocked_person(services, session):
     session.expire_all()
     assert session.get(Person, "u1").blocked
     assert session.exec(select(Device).where(Device.mac == OLD)).one().revoked
+
+
+SAM = Contact("u2", "Sam Rivera", ["+14155550199"], [])
+
+
+async def test_blocked_persons_device_cant_register_as_someone_else(services, session, opn):
+    from app.devices import DeviceBlocked
+    from app.models import Person
+
+    await reg(services, session, OLD)
+    await services.devices.revoke_person(session, session.get(Person, "u1"), actor="admin")
+    with pytest.raises(DeviceBlocked) as e:
+        await reg(services, session, OLD, contact=SAM)  # Maya's phone, Sam's details
+    assert e.value.owner.contact_uid == "u1"
+    assert opn.allowed == []
+    d = session.exec(select(Device).where(Device.mac == OLD)).one()
+    assert d.revoked and d.person_uid == "u1"  # not moved to Sam
+    with pytest.raises(DeviceBlocked):
+        await services.devices.adopt(session, mac=OLD, contact=SAM, device_type=DeviceType.other, nickname=None,
+                                     actor="admin")
+    # Sam's own devices are unaffected
+    assert isinstance(await reg(services, session, NEW, contact=SAM), Registered)
+
+
+async def test_unblocking_frees_the_devices(services, session, opn):
+    from app.models import Person
+
+    await reg(services, session, OLD)
+    p = session.get(Person, "u1")
+    await services.devices.revoke_person(session, p, actor="admin")
+    services.devices.unblock_person(session, p, actor="admin")
+    assert isinstance(await reg(services, session, OLD), Registered)
+    assert opn.allowed == [OLD]

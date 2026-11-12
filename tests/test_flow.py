@@ -187,3 +187,28 @@ def test_api_revoke_last_device_removes_person(guest, ha, dav, opn, session):
     assert opn.allowed == []
     assert ha.get("/api/people").json() == []
     assert ha.get("/api/devices", params={"include_revoked": True}).json() == []
+
+
+def _block_maya_with_her_phone(guest, ha, dav):
+    dav.add("u1", "Maya Chen", ["+14155550142"], "1991-04-12")
+    login(guest)
+    guest.post("/device", data={"device_type": "phone", "csrf_token": csrf(guest.get("/device").text)})
+    assert ha.post("/api/people/u1/revoke").status_code == 200
+
+
+def test_blocked_device_cant_sign_in_with_other_details(guest, ha, dav, opn, session):
+    _block_maya_with_her_phone(guest, ha, dav)
+    dav.add("u2", "Sam Rivera", ["+14155550199"], "1990-02-03")
+    r = login(guest, phone="(415) 555-0199", birthday="1990-02-03")  # valid details, but Maya's phone
+    assert r.status_code == 401 and "verify those details" in r.text
+    assert opn.allowed == []
+    d = session.exec(select(Device).where(Device.mac == GUEST_MAC)).one()
+    assert d.revoked and d.person_uid == "u1"
+
+
+def test_blocked_device_never_creates_an_approval(guest, ha, dav, session):
+    _block_maya_with_her_phone(guest, ha, dav)
+    dav.add("u3", "No Birthday", ["+14155550111"])  # would normally go to approval
+    r = login(guest, phone="(415) 555-0111")
+    assert r.status_code == 401
+    assert session.exec(select(ApprovalRequest)).all() == []

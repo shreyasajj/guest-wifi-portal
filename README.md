@@ -403,6 +403,15 @@ Changes to `docker-compose.yml` itself aren't picked up by the timer. After edit
 **Removing a MAC in OPNsense revokes the device.** If you delete a registered device's MAC from the zone's **Allowed MAC addresses** (or from `GUEST_AUTH_MACS`), the next reconciler run (within `RECONCILE_SECONDS`) revokes that device, the same as **Revoke** in the admin page. When a person has no devices left, they're removed from **People** (and from Home Assistant). The audit log keeps the history, and if they sign in again they're added back from CardDAV.
 
 - **Blocked people are never removed.** **Revoke person** keeps them, so the block still stops them signing in again.
+
+**Blocking a person blocks all their devices.** **Revoke person** revokes every device they have, removes the MACs from OPNsense and disconnects their sessions. Until you unblock them:
+
+- They can't sign in, from any device.
+- None of their devices can get back on, even with someone else's phone number and birthday. The login page shows the usual generic message and never opens an approval request, so you don't get notified.
+- An admin can't adopt one of their MACs for someone else. The admin page tells you who it belongs to.
+- If one of their MACs is added back by hand in OPNsense, the reconciler removes it again.
+
+**Unblock** lifts all of this. Their devices stay revoked until they sign in again.
 - **Safety net:** if *every* registered MAC disappears at once (more than one device), the reconciler assumes the zone was reset or restored and does nothing. It adds an audit log entry marked for review. Revoke devices from the admin page instead if you really mean to remove everyone.
 - Set `MISSING_MAC_ACTION=readd` for the old behaviour, where OPNsense is treated as out of sync and missing MACs are put back.
 
