@@ -1,6 +1,8 @@
 """REST API for Home Assistant (bearer token) + SSE event stream."""
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -10,10 +12,12 @@ from ..approvals import AlreadyResolved, ContactChoiceRequired, NotFound, reques
 from ..db import get_session
 from ..devices import device_payload
 from ..macs import normalize_mac
-from ..models import AuditLog, DecidedBy, Device, Person, iso
+from ..models import ApprovalRequest, AuditLog, DecidedBy, Device, Person, iso
 from ..opnsense import OPNsenseError
 from ..security import require_api_token
 from ..views import approvals_view, devices_view, people_view, sse_stream, status_view, unidentified_view
+
+log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", dependencies=[Depends(require_api_token)])
 
@@ -70,12 +74,13 @@ async def _resolve(request, session, req_id, decision, actor, contact_uid=None):
                                                      contact_uid=contact_uid, actor=actor)
     except NotFound:
         raise HTTPException(404, "request not found")
-    except AlreadyResolved as e:
-        raise HTTPException(409, f"already {e.status}")
+    except AlreadyResolved:
+        session.expire_all()
+        raise HTTPException(409, f"already {session.get(ApprovalRequest, req_id).status}")
     except ContactChoiceRequired:
         raise HTTPException(422, "several contacts matched; pass contact_uid")
-    except ValueError as e:
-        raise HTTPException(422, str(e))
+    except ValueError:
+        raise HTTPException(422, "invalid decision or contact_uid for this request")
     return {**request_payload(res.request), "birthday_saved": res.birthday_saved, "error": res.error, "note": res.note}
 
 
@@ -109,8 +114,9 @@ async def revoke_device(ref: str, request: Request, actor: str = Depends(require
     d = _device(session, ref)
     try:
         await _svc(request).devices.revoke_device(session, d, actor=actor)
-    except OPNsenseError as e:
-        raise HTTPException(502, str(e))
+    except OPNsenseError:
+        log.exception("OPNsense request failed")
+        raise HTTPException(502, "OPNsense request failed; see the portal logs")
     return device_payload(d)
 
 
@@ -122,8 +128,9 @@ async def revoke_person(uid: str, request: Request, actor: str = Depends(require
         raise HTTPException(404, "person not found")
     try:
         devs = await _svc(request).devices.revoke_person(session, p, actor=actor)
-    except OPNsenseError as e:
-        raise HTTPException(502, str(e))
+    except OPNsenseError:
+        log.exception("OPNsense request failed")
+        raise HTTPException(502, "OPNsense request failed; see the portal logs")
     return {"person_uid": uid, "revoked_devices": [d.mac for d in devs], "blocked": True}
 
 

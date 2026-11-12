@@ -189,7 +189,8 @@ class ApprovalService:
                 audit(session, "carddav_write", actor=actor, target=contact_uid,
                       detail={"request": req.id, "bday": req.entered_birthday}, needs_review=bool(note))
             except CardDAVError as exc:
-                result.error = f"Access granted, but saving the birthday failed: {exc}"
+                log.warning("saving birthday for %s failed: %s", contact_uid, exc)
+                result.error = "Access granted, but saving the birthday to Nextcloud failed. See the audit log."
                 audit(session, "carddav_write_failed", actor=actor, target=contact_uid,
                       detail={"request": req.id, "error": str(exc)}, needs_review=True)
 

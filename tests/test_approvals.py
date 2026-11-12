@@ -161,7 +161,24 @@ async def test_etag_conflict_twice_grants_access_and_reports_error(services, ses
     res = await services.approvals.resolve(session, req.id, "approve", by=DecidedBy.admin_ui)
     assert res.request.status == "approved"
     assert not res.birthday_saved
-    assert "saving the birthday failed" in res.error
+    assert "saving the birthday to Nextcloud failed" in res.error
+    assert "ETag" not in res.error  # no exception text in what the admin page shows
     assert session.get(ApprovalRequest, req.id).error == res.error
     fail = session.exec(select(AuditLog).where(AuditLog.action == "carddav_write_failed")).one()
-    assert fail.needs_review
+    assert fail.needs_review and "ETag" in fail.detail["error"]  # full error kept in the audit log
+
+
+def test_audit_keeps_personal_data_out_of_the_container_log(session, caplog):
+    import logging
+
+    from app.events import audit
+
+    with caplog.at_level(logging.INFO, logger="app.events"):
+        entry = audit(session, "approval_requested", target="aa:bb:cc:dd:ee:ff",
+                      detail={"contacts": ["u1"], "mac": "aa:bb:cc:dd:ee:ff", "birthday": "1991-04-12",
+                              "phone": "+1415***0142", "reason": "needs_approval", "error": "boom"})
+    text = caplog.text
+    assert "approval_requested" in text and "needs_approval" in text and "aa:bb:cc:dd:ee:ff" in text
+    for secret in ("1991-04-12", "0142", "boom", "u1"):
+        assert secret not in text
+    assert entry.detail["birthday"] == "1991-04-12"  # still in the audit log

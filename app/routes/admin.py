@@ -14,7 +14,7 @@ from sqlmodel import Session, col, func, select
 from ..approvals import AlreadyResolved, ContactChoiceRequired, NotFound
 from ..carddav import CardDAVError
 from ..db import get_session
-from ..devices import DeviceBlocked, PersonBlocked
+from ..devices import DeviceBlocked, PersonBlocked, blocked_owner
 from ..events import audit
 from ..macs import normalize_mac
 from ..matching import Contact
@@ -230,12 +230,14 @@ async def resolve(req_id: str, request: Request, decision: str = Form(...), cont
                                                      contact_uid=contact_uid or None, actor=admin["name"])
     except ContactChoiceRequired:
         return _flash("warn", "Several contacts matched. Pick which one gets the birthday.", 200)
-    except AlreadyResolved as e:
-        return _flash("warn", f"Already handled ({e.status.replace('_', ' ')}).")
+    except AlreadyResolved:
+        session.expire_all()
+        status = session.get(ApprovalRequest, req_id).status
+        return _flash("warn", f"Already handled ({status.replace('_', ' ')}).")
     except NotFound:
         return _flash("bad", "That request no longer exists.")
-    except ValueError as e:
-        return _flash("bad", str(e))
+    except ValueError:
+        return _flash("bad", "That decision or contact isn't valid for this request.")
     if res.error:
         return _flash("warn", res.error)
     word = {"approved": "Approved and birthday saved", "approved_no_save": "Approved (birthday not saved)",
@@ -251,8 +253,9 @@ async def revoke_device(device_id: int, request: Request, admin: dict = Depends(
         return _flash("bad", "Device not found.", 404)
     try:
         await _svc(request).devices.revoke_device(session, d, actor=admin["name"])
-    except OPNsenseError as e:
-        return _flash("bad", f"OPNsense error: {e}", 502)
+    except OPNsenseError:
+        log.exception("OPNsense request failed")
+        return _flash("bad", "OPNsense request failed. Details are in the portal logs.", 502)
     return _flash("ok", f"Revoked {d.label} ({d.mac}).")
 
 
@@ -289,8 +292,9 @@ async def revoke_person(uid: str, request: Request, admin: dict = Depends(requir
         return _flash("bad", "Person not found.", 404)
     try:
         devs = await _svc(request).devices.revoke_person(session, p, actor=admin["name"])
-    except OPNsenseError as e:
-        return _flash("bad", f"OPNsense error: {e}", 502)
+    except OPNsenseError:
+        log.exception("OPNsense request failed")
+        return _flash("bad", "OPNsense request failed. Details are in the portal logs.", 502)
     return _flash("ok", f"Revoked {p.display_name} ({len(devs)} device{'s' if len(devs) != 1 else ''}) and blocked future logins.")
 
 
@@ -313,8 +317,9 @@ async def adopt(mac: str, request: Request, contact_uid: str = Form(...), device
         return _flash("bad", "Invalid MAC.", 400)
     try:
         contact = await svc.carddav.get_by_uid(contact_uid)
-    except CardDAVError as e:
-        return _flash("bad", f"Couldn't load contacts: {e}", 502)
+    except CardDAVError:
+        log.exception("loading contacts failed")
+        return _flash("bad", "Couldn't load contacts from Nextcloud. Details are in the portal logs.", 502)
     if not contact:
         return _flash("bad", "Contact not found.", 404)
     try:
@@ -324,12 +329,15 @@ async def adopt(mac: str, request: Request, contact_uid: str = Form(...), device
     try:
         await svc.devices.adopt(session, mac=mac_n, contact=contact, device_type=dtype, nickname=nickname,
                                 actor=admin["name"])
-    except DeviceBlocked as e:
-        return _flash("bad", f"{mac_n} belongs to {e.owner.display_name}, who is blocked. Unblock them first.", 409)
+    except DeviceBlocked:
+        owner = blocked_owner(session, mac_n)
+        name = owner.display_name if owner else "a blocked person"
+        return _flash("bad", f"{mac_n} belongs to {name}, who is blocked. Unblock them first.", 409)
     except PersonBlocked:
         return _flash("bad", f"{contact.display_name} is blocked. Unblock them first.", 409)
-    except OPNsenseError as e:
-        return _flash("bad", f"OPNsense error: {e}", 502)
+    except OPNsenseError:
+        log.exception("OPNsense request failed")
+        return _flash("bad", "OPNsense request failed. Details are in the portal logs.", 502)
     return _flash("ok", f"Assigned {mac_n} to {contact.display_name}.")
 
 
@@ -341,8 +349,9 @@ async def remove_unidentified(mac: str, request: Request, admin: dict = Depends(
         return _flash("bad", "Invalid MAC.", 400)
     try:
         await _svc(request).devices.remove_unidentified(session, mac_n, actor=admin["name"])
-    except OPNsenseError as e:
-        return _flash("bad", f"OPNsense error: {e}", 502)
+    except OPNsenseError:
+        log.exception("OPNsense request failed")
+        return _flash("bad", "OPNsense request failed. Details are in the portal logs.", 502)
     return _flash("ok", f"Removed {mac_n}.")
 
 
