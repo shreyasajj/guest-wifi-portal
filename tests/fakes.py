@@ -36,13 +36,13 @@ class FakeOPNsense:
             code, self.fail_next = self.fail_next, None
             return httpx.Response(code, text="boom")
 
-        if path == "captiveportal/settings/searchZones":
+        if path == "captiveportal/settings/search_zones":
             return httpx.Response(200, json={"rows": [{"uuid": ZONE_UUID, "zoneid": "0", "enabled": "1",
                                                        "description": "Guest"}], "total": 1})
-        if path == f"captiveportal/settings/getZone/{ZONE_UUID}":
+        if path == f"captiveportal/settings/get_zone/{ZONE_UUID}":
             return httpx.Response(200, json={"zone": {"enabled": "1", "allowedMACAddresses": {
                 m: {"value": m, "selected": 1} for m in self.allowed} if self.allowed else {"": {"value": "", "selected": 1}}}})
-        if path == f"captiveportal/settings/setZone/{ZONE_UUID}":
+        if path == f"captiveportal/settings/set_zone/{ZONE_UUID}":
             raw = body["zone"]["allowedMACAddresses"]
             self.allowed = [m for m in raw.split(",") if m]
             return httpx.Response(200, json={"result": "saved"})
@@ -55,20 +55,20 @@ class FakeOPNsense:
             sid = body["sessionId"]
             self.sessions = [s for s in self.sessions if s["sessionId"] != sid]
             return httpx.Response(200, json={"terminateCause": "Admin-Reset"})
-        if path == "diagnostics/interface/getArp":
+        if path == "diagnostics/interface/get_arp":
             return httpx.Response(200, json=self.arp)
         if path == "kea/leases4/search":
             return httpx.Response(200, json={"rows": self.leases["kea"], "total": len(self.leases["kea"])})
         if path == "dnsmasq/leases/search":
             return httpx.Response(200, json={"rows": self.leases["dnsmasq"]})
-        if path == "dhcpv4/leases/searchLease":
+        if path == "dhcpv4/leases/search_lease":
             return httpx.Response(200, json={"rows": self.leases["isc"]})
-        if path.startswith("firewall/alias/getAliasUUID/"):
+        if path.startswith("firewall/alias/get_alias_uuid/"):
             return httpx.Response(200, json={"uuid": ALIAS_UUID} if path.endswith("GUEST_AUTH_MACS") else [])
-        if path == f"firewall/alias/getItem/{ALIAS_UUID}":
+        if path == f"firewall/alias/get_item/{ALIAS_UUID}":
             return httpx.Response(200, json={"alias": {"name": "GUEST_AUTH_MACS", "type": {"mac": {"selected": 1}},
                                                        "content": {m: {"value": m, "selected": 1} for m in self.alias}}})
-        if path == f"firewall/alias/setItem/{ALIAS_UUID}":
+        if path == f"firewall/alias/set_item/{ALIAS_UUID}":
             self.alias = [m for m in body["alias"]["content"].split("\n") if m]
             return httpx.Response(200, json={"result": "saved"})
         if path == "firewall/alias/reconfigure":

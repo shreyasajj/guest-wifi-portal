@@ -5,7 +5,7 @@ import httpx
 import pytest
 import respx
 
-from app.opnsense import AccessController, OPNsenseClient, OPNsenseError, parse_list_field
+from app.opnsense import AccessController, OPNsenseClient, OPNsenseError, _camel_action, parse_list_field
 
 from .fakes import ALIAS_UUID, ZONE_UUID, FakeOPNsense
 
@@ -26,10 +26,10 @@ def test_parse_list_field_variants():
 
 @respx.mock
 async def test_add_allowed_mac_exact_calls():
-    respx.get(f"{BASE}/captiveportal/settings/searchZones").respond(json={"rows": [{"uuid": ZONE_UUID, "zoneid": "0"}]})
-    respx.get(f"{BASE}/captiveportal/settings/getZone/{ZONE_UUID}").respond(
+    respx.get(f"{BASE}/captiveportal/settings/search_zones").respond(json={"rows": [{"uuid": ZONE_UUID, "zoneid": "0"}]})
+    respx.get(f"{BASE}/captiveportal/settings/get_zone/{ZONE_UUID}").respond(
         json={"zone": {"allowedMACAddresses": {"11:22:33:44:55:66": {"value": "11:22:33:44:55:66", "selected": 1}}}})
-    set_route = respx.post(f"{BASE}/captiveportal/settings/setZone/{ZONE_UUID}").respond(json={"result": "saved"})
+    set_route = respx.post(f"{BASE}/captiveportal/settings/set_zone/{ZONE_UUID}").respond(json={"result": "saved"})
     reconf = respx.post(f"{BASE}/captiveportal/service/reconfigure").respond(json={"status": "ok"})
 
     client = make()
@@ -43,38 +43,73 @@ async def test_add_allowed_mac_exact_calls():
 
 @respx.mock
 async def test_add_existing_mac_is_noop():
-    respx.get(f"{BASE}/captiveportal/settings/searchZones").respond(json={"rows": [{"uuid": ZONE_UUID, "zoneid": "0"}]})
-    respx.get(f"{BASE}/captiveportal/settings/getZone/{ZONE_UUID}").respond(
+    respx.get(f"{BASE}/captiveportal/settings/search_zones").respond(json={"rows": [{"uuid": ZONE_UUID, "zoneid": "0"}]})
+    respx.get(f"{BASE}/captiveportal/settings/get_zone/{ZONE_UUID}").respond(
         json={"zone": {"allowedMACAddresses": "aa:bb:cc:dd:ee:ff"}})
-    set_route = respx.post(f"{BASE}/captiveportal/settings/setZone/{ZONE_UUID}")
+    set_route = respx.post(f"{BASE}/captiveportal/settings/set_zone/{ZONE_UUID}")
     assert await make().add_allowed_macs("aa:bb:cc:dd:ee:ff") is False
     assert not set_route.called
 
 
 @respx.mock
 async def test_zone_not_found():
-    respx.get(f"{BASE}/captiveportal/settings/searchZones").respond(json={"rows": [{"uuid": "x", "zoneid": "3"}]})
+    respx.get(f"{BASE}/captiveportal/settings/search_zones").respond(json={"rows": [{"uuid": "x", "zoneid": "3"}]})
     with pytest.raises(OPNsenseError, match="zone 0 not found"):
         await make().get_allowed_macs()
 
 
 @respx.mock
 async def test_http_error_and_failed_save_raise():
-    respx.get(f"{BASE}/diagnostics/interface/getArp").respond(500, text="err")
+    respx.get(f"{BASE}/diagnostics/interface/get_arp").respond(500, text="err")
     with pytest.raises(OPNsenseError, match="HTTP 500"):
         await make().get_arp()
 
-    respx.get(f"{BASE}/captiveportal/settings/searchZones").respond(json={"rows": [{"uuid": ZONE_UUID, "zoneid": "0"}]})
-    respx.get(f"{BASE}/captiveportal/settings/getZone/{ZONE_UUID}").respond(json={"zone": {"allowedMACAddresses": ""}})
-    respx.post(f"{BASE}/captiveportal/settings/setZone/{ZONE_UUID}").respond(
+    respx.get(f"{BASE}/captiveportal/settings/search_zones").respond(json={"rows": [{"uuid": ZONE_UUID, "zoneid": "0"}]})
+    respx.get(f"{BASE}/captiveportal/settings/get_zone/{ZONE_UUID}").respond(json={"zone": {"allowedMACAddresses": ""}})
+    respx.post(f"{BASE}/captiveportal/settings/set_zone/{ZONE_UUID}").respond(
         json={"result": "failed", "validations": {"zone.allowedMACAddresses": "invalid"}})
     with pytest.raises(OPNsenseError, match="setZone failed"):
         await make().add_allowed_macs("aa:bb:cc:dd:ee:ff")
 
 
+def test_camel_action_maps_to_pre_25_7_names():
+    assert _camel_action("diagnostics/interface/get_arp") == "diagnostics/interface/getArp"
+    assert _camel_action("captiveportal/settings/search_zones") == "captiveportal/settings/searchZones"
+    assert _camel_action("firewall/alias/get_alias_uuid/GUEST") == "firewall/alias/getAliasUUID/GUEST"
+    assert _camel_action("captiveportal/session/list/0") == "captiveportal/session/list/0"
+
+
+ARP_ROW = {"mac": "aa:bb:cc:dd:ee:01", "ip": "10.0.20.5", "intf": "vlan0.20", "expired": False}
+
+
+@respx.mock
+async def test_snake_case_arp_works_on_current_opnsense():
+    snake = respx.get(f"{BASE}/diagnostics/interface/get_arp").respond(json=[ARP_ROW])
+    camel = respx.get(f"{BASE}/diagnostics/interface/getArp")
+    assert [e.mac for e in await make().get_arp()] == ["aa:bb:cc:dd:ee:01"]
+    assert snake.called and not camel.called
+
+
+@respx.mock
+async def test_403_retries_with_camel_case_for_older_opnsense():
+    # Before 25.7 the ACL pattern was "getArp*", so the snake_case URL is refused.
+    respx.get(f"{BASE}/diagnostics/interface/get_arp").respond(403, json={"status": 403, "message": "Forbidden"})
+    camel = respx.get(f"{BASE}/diagnostics/interface/getArp").respond(json=[ARP_ROW])
+    assert [e.mac for e in await make().get_arp()] == ["aa:bb:cc:dd:ee:01"]
+    assert camel.called
+
+
+@respx.mock
+async def test_403_on_both_spellings_reports_original_path():
+    respx.get(f"{BASE}/diagnostics/interface/get_arp").respond(403, json={"status": 403, "message": "Forbidden"})
+    respx.get(f"{BASE}/diagnostics/interface/getArp").respond(403, json={"status": 403, "message": "Forbidden"})
+    with pytest.raises(OPNsenseError, match="get_arp: HTTP 403"):
+        await make().get_arp()
+
+
 @respx.mock
 async def test_connection_error_wrapped():
-    respx.get(f"{BASE}/diagnostics/interface/getArp").mock(side_effect=httpx.ConnectError("refused"))
+    respx.get(f"{BASE}/diagnostics/interface/get_arp").mock(side_effect=httpx.ConnectError("refused"))
     with pytest.raises(OPNsenseError):
         await make().get_arp()
 
@@ -149,7 +184,7 @@ async def test_alias_mode_add_remove():
     access = AccessController(c, use_zone=False, use_alias=True)
     await access.allow("aa:bb:cc:dd:ee:ff")
     assert fake.alias == ["11:22:33:44:55:66", "aa:bb:cc:dd:ee:ff"]
-    assert ("POST", f"firewall/alias/setItem/{ALIAS_UUID}",
+    assert ("POST", f"firewall/alias/set_item/{ALIAS_UUID}",
             {"alias": {"content": "11:22:33:44:55:66\naa:bb:cc:dd:ee:ff"}}) in fake.calls
     assert ("POST", "firewall/alias/reconfigure", {}) in fake.calls
     await access.remove("11:22:33:44:55:66")
