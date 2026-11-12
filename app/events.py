@@ -46,14 +46,6 @@ class EventBus:
         return ev
 
 
-# Audit details are stored in full in the DB (the admin audit log shows them). Only these keys
-# are also written to the container log: no birthdays, phone numbers, names, emails or errors.
-LOGGABLE_DETAIL = frozenset({
-    "reason", "type", "status", "decision", "sources", "mac", "macs", "ip", "request", "new",
-    "retry_after", "devices", "save_birthday", "decided_by",
-})
-
-
 def audit(session: Session, action: str, *, actor: str = "system", target: str | None = None,
           detail: dict | None = None, needs_review: bool = False, commit: bool = True) -> AuditLog:
     entry = AuditLog(actor=actor, action=action, target=target,
@@ -61,6 +53,7 @@ def audit(session: Session, action: str, *, actor: str = "system", target: str |
     session.add(entry)
     if commit:
         session.commit()
-    safe = {k: v for k, v in (detail or {}).items() if k in LOGGABLE_DETAIL}
-    log.info("audit %s actor=%s target=%s %s", action, actor, target, safe or "")
+    # Details can hold birthdays, phone numbers and names, so they stay in the DB audit log
+    # (shown on the admin page) and never go to the container log.
+    log.info("audit %s actor=%s target=%s", action, actor, target)
     return entry

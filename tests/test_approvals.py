@@ -178,7 +178,7 @@ def test_audit_keeps_personal_data_out_of_the_container_log(session, caplog):
                       detail={"contacts": ["u1"], "mac": "aa:bb:cc:dd:ee:ff", "birthday": "1991-04-12",
                               "phone": "+1415***0142", "reason": "needs_approval", "error": "boom"})
     text = caplog.text
-    assert "approval_requested" in text and "needs_approval" in text and "aa:bb:cc:dd:ee:ff" in text
-    for secret in ("1991-04-12", "0142", "boom", "u1"):
+    assert "approval_requested" in text and "aa:bb:cc:dd:ee:ff" in text
+    for secret in ("1991-04-12", "0142", "boom", "u1", "needs_approval"):
         assert secret not in text
     assert entry.detail["birthday"] == "1991-04-12"  # still in the audit log
