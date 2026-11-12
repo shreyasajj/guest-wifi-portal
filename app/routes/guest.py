@@ -12,7 +12,7 @@ from sqlmodel import Session, select
 from ..approvals import Cooldown
 from ..carddav import CardDAVError
 from ..db import get_session
-from ..devices import PersonBlocked
+from ..devices import PersonBlocked, blocked_owner
 from ..events import audit
 from ..matching import Contact, Outcome, evaluate, normalize_phone
 from ..models import ApprovalRequest, ApprovalStatus, Device, DeviceType, Person
@@ -104,6 +104,12 @@ async def login(request: Request, phone: str = Form(""), birthday: str = Form(""
     if retry:
         log_attempt(False, "rate_limited", retry_after=retry)
         return _login(request, 429, locked=retry, **form)
+
+    owner = blocked_owner(session, mac)
+    if owner is not None:
+        # Same generic message as a wrong birthday, and no approval request, so you aren't notified.
+        log_attempt(False, "blocked_device", owner=owner.contact_uid)
+        return _login(request, 401, error=GENERIC_REJECT, **form)
 
     try:
         entered = date.fromisoformat(birthday.strip())
