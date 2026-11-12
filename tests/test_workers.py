@@ -20,7 +20,7 @@ def test_plan_reconcile():
     sessions = [CPSession("s-c", C, "10.0.20.3", "", {}), CPSession("s-x", "ee:ee:ee:ee:ee:ee", "10.0.20.9", "", {}),
                 CPSession("s-a", A, "10.0.20.1", "", {})]
     plan = plan_reconcile(allowed, sessions, devices)
-    assert plan.readd == {B}  # authorized but missing in OPNsense
+    assert plan.revoke == {B} and plan.readd == set()  # authorized but removed from OPNsense
     assert plan.remove == {C}  # revoked but still allowed
     assert plan.disconnect == ["s-c"]
     assert set(plan.unidentified) == {D, "ee:ee:ee:ee:ee:ee"}
@@ -29,12 +29,25 @@ def test_plan_reconcile():
 
 
 def test_plan_reconcile_alias_and_zone():
-    plan = plan_reconcile({"zone": {A}, "alias": {D}}, [], [dev(A)])
-    assert plan.readd == {A}  # missing from alias
+    plan = plan_reconcile({"zone": {A, B}, "alias": {B, D}}, [], [dev(A), dev(B)])
+    assert plan.revoke == {A}  # missing from alias
     assert plan.unidentified[D]["sources"] == {"alias"}
 
 
+def test_plan_reconcile_readd_mode():
+    plan = plan_reconcile({"zone": {A}}, [], [dev(A), dev(B)], missing_action="readd")
+    assert plan.readd == {B} and plan.revoke == set()
+
+
+def test_plan_reconcile_holds_when_every_mac_vanishes():
+    plan = plan_reconcile({"zone": set()}, [], [dev(A), dev(B), dev(C, revoked=True)])
+    assert plan.revoke == set() and plan.held == {A, B}
+    # a single registered device can still be removed
+    assert plan_reconcile({"zone": set()}, [], [dev(A)]).revoke == {A}
+
+
 async def test_run_reconcile_readds_and_flags(services, session, opn):
+    services.settings.missing_mac_action = "readd"
     session.add(dev(A))
     session.add(dev(B, revoked=True))
     session.commit()
@@ -56,6 +69,82 @@ async def test_run_reconcile_readds_and_flags(services, session, opn):
     await run_reconcile(services)
     session.expire_all()
     assert session.exec(select(UnidentifiedDevice)).all() == []
+
+
+def person(session, uid="u1", name="Maya", **kw):
+    """Add and commit a person first: devices reference it with a foreign key."""
+    p = Person(contact_uid=uid, display_name=name, **kw)
+    session.add(p)
+    session.commit()
+    return p
+
+
+async def test_removed_mac_revokes_device_and_keeps_person_with_other_devices(services, session, opn):
+    person(session)
+    session.add(dev(A, person_uid="u1", type="phone"))
+    session.add(dev(B, person_uid="u1"))
+    session.commit()
+    opn.allowed = [B]  # you deleted A in OPNsense
+
+    plan = await run_reconcile(services)
+    assert plan.revoke == {A} and plan.readd == set()
+    assert opn.allowed == [B]  # not put back
+    session.expire_all()
+    a = session.exec(select(Device).where(Device.mac == A)).one()
+    assert a.revoked and a.revoke_reason == "removed from OPNsense allowed MACs"
+    assert session.get(Person, "u1") is not None  # still has B
+    assert session.exec(select(Event).where(Event.type == "device_revoked")).first()
+
+
+async def test_removing_last_mac_removes_person(services, session, opn):
+    person(session)
+    session.add(dev(A, person_uid="u1", type="phone"))
+    session.add(dev(B, person_uid="u1", revoked=True))  # revoked earlier
+    person(session, "u2", "Sam")
+    session.add(dev(C, person_uid="u2"))
+    session.commit()
+    opn.allowed = [C]
+
+    await run_reconcile(services)
+    session.expire_all()
+    assert session.get(Person, "u1") is None
+    assert session.exec(select(Device).where(Device.person_uid == "u1")).all() == []
+    assert session.get(Person, "u2") is not None
+    removed = session.exec(select(Event).where(Event.type == "person_removed")).one()
+    assert removed.as_dict()["data"] == {"person_uid": "u1", "name": "Maya"}
+    from app.models import AuditLog
+    assert session.exec(select(AuditLog).where(AuditLog.action == "person_removed")).one().target == "u1"
+    # the device is gone from the DB, so the next run doesn't flag or re-add anything
+    plan = await run_reconcile(services)
+    assert plan.revoke == set() and plan.readd == set() and opn.allowed == [C]
+
+
+async def test_blocked_person_is_never_removed(services, session, opn):
+    person(session, blocked=True)
+    session.add(dev(A, person_uid="u1"))
+    person(session, "u2")
+    session.add(dev(B, person_uid="u2"))
+    session.commit()
+    opn.allowed = [B]
+    await run_reconcile(services)
+    session.expire_all()
+    assert session.get(Person, "u1").blocked
+    assert session.exec(select(Device).where(Device.mac == A)).one().revoked
+
+
+async def test_every_mac_vanishing_revokes_nothing(services, session, opn):
+    person(session)
+    session.add(dev(A, person_uid="u1"))
+    session.add(dev(B, person_uid="u1"))
+    session.commit()
+    opn.allowed = []
+    plan = await run_reconcile(services)
+    assert plan.held == {A, B}
+    session.expire_all()
+    assert not any(d.revoked for d in session.exec(select(Device)).all())
+    from app.models import AuditLog
+    entry = session.exec(select(AuditLog).where(AuditLog.action == "reconciler_all_missing")).one()
+    assert entry.needs_review
 
 
 # -------------------------------------------------------------- presence

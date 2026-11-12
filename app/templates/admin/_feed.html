@@ -1,7 +1,7 @@
 {% set labels = {
   'person_home': 'arrived home', 'person_away': 'left', 'device_online': 'came online', 'device_offline': 'went offline',
   'new_device': 'registered a device', 'device_revoked': 'device revoked', 'person_revoked': 'revoked and blocked',
-  'person_unblocked': 'unblocked', 'unidentified_device': 'Unidentified device found', 'approval_requested': 'is waiting for approval',
+  'person_unblocked': 'unblocked', 'person_removed': 'removed (no devices left)', 'unidentified_device': 'Unidentified device found', 'approval_requested': 'is waiting for approval',
   'approval_resolved': 'approval', 'device_updated': 'device updated'} %}
 {% if not events %}<div class="empty">Nothing yet.</div>{% else %}
 <ul class="feed">

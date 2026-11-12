@@ -396,9 +396,15 @@ Changes to `docker-compose.yml` itself aren't picked up by the timer. After edit
 | Worker | Interval | What it does |
 |---|---|---|
 | Presence | `PRESENCE_POLL_SECONDS` (30 s) | ARP on the guest interface plus recently renewed DHCP leases. A device is online immediately and offline after `AWAY_GRACE_SECONDS` (5 min). A person is home while their phone is online. |
-| Reconciler | `RECONCILE_SECONDS` (60 s) | Re-adds authorized MACs that vanished from OPNsense, removes revoked ones, disconnects sessions of revoked devices, and lists unknown MACs/sessions as **Unidentified**. |
+| Reconciler | `RECONCILE_SECONDS` (60 s) | Revokes registered devices whose MAC you removed from OPNsense (see below), removes revoked ones, disconnects sessions of revoked devices, and lists unknown MACs/sessions as **Unidentified**. |
 | Approval expiry | 5 s | Marks pending requests past `expires_at` as expired. The guest sees "Couldn't connect, try again later." |
 | Housekeeping | 1 h | Prunes old events. If `MAC_EXPIRY_DAYS` is above 0, also revokes devices not seen for that many days (off by default). |
+
+**Removing a MAC in OPNsense revokes the device.** If you delete a registered device's MAC from the zone's **Allowed MAC addresses** (or from `GUEST_AUTH_MACS`), the next reconciler run (within `RECONCILE_SECONDS`) revokes that device, the same as **Revoke** in the admin page. When a person has no devices left, they're removed from **People** (and from Home Assistant). The audit log keeps the history, and if they sign in again they're added back from CardDAV.
+
+- **Blocked people are never removed.** **Revoke person** keeps them, so the block still stops them signing in again.
+- **Safety net:** if *every* registered MAC disappears at once (more than one device), the reconciler assumes the zone was reset or restored and does nothing. It adds an audit log entry marked for review. Revoke devices from the admin page instead if you really mean to remove everyone.
+- Set `MISSING_MAC_ACTION=readd` for the old behaviour, where OPNsense is treated as out of sync and missing MACs are put back.
 
 **ARP caveat:** FreeBSD keeps ARP entries for up to 20 minutes, so a phone that just left can still look present for a while. The grace period hides short sleeps but not that. If you need tighter presence, the **UniFi controller's client list** is the most accurate source: APs report association and disassociation within seconds. Options:
 
@@ -513,7 +519,7 @@ Bearer-token auth (`API_TOKENS`), only from `ADMIN_ALLOWED_NETWORKS`.
 | POST | `/api/people/{uid}/revoke`, `/api/people/{uid}/unblock` | |
 | GET | `/api/events` | Server-Sent Events. Send `Last-Event-ID` (or `?since=`) to replay missed events. |
 
-Event types: `approval_requested`, `approval_resolved`, `new_device`, `device_online`, `device_offline`, `device_updated`, `device_revoked`, `person_home`, `person_away`, `person_revoked`, `person_unblocked`, `unidentified_device`.
+Event types: `approval_requested`, `approval_resolved`, `new_device`, `device_online`, `device_offline`, `device_updated`, `device_revoked`, `person_home`, `person_away`, `person_revoked`, `person_unblocked`, `person_removed`, `unidentified_device`.
 
 Guest side (no auth): `/`, `/login`, `/waiting`, `/waiting/status`, `/device`, `/failed`, `/captive-portal` (RFC 8908), `/healthz`.
 

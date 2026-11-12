@@ -81,6 +81,9 @@ class Settings(BaseSettings):
     presence_poll_seconds: int = 30
     away_grace_seconds: int = 300
     reconcile_seconds: int = 60
+    # What the reconciler does with an authorized device whose MAC is gone from OPNsense:
+    # revoke = treat it as removed on purpose; readd = put it back.
+    missing_mac_action: Literal["revoke", "readd"] = "revoke"
     approval_expiry_check_seconds: int = 5
     mac_expiry_days: int = 0  # 0 = never remove devices that haven't been seen
     event_retention_days: int = 14
