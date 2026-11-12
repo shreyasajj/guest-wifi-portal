@@ -172,13 +172,20 @@ Rule 2 makes the reverse proxy reachable, but only on 443. Rule 5 blocks every o
 
 ### 5. API user and key
 
-1. **System > Access > Groups**: create the group `guest-portal-api` with these privileges (search for them in the privilege list):
-   - **Services: Captive Portal**: zone settings, sessions, service reconfigure
-   - **Diagnostics: ARP Table**
-   - **Firewall: Alias: Edit** (for `alias`/`both` mode), plus **Firewall: Aliases** if your version lists it separately
-   - Your DHCP server's lease page: **Services: Kea DHCPv4** (Kea), **Services: Dnsmasq DNS/DHCP** (Dnsmasq) or **Status: DHCP leases** (ISC)
+1. **System > Access > Groups**: create the group `guest-portal-api` with these privileges. Search for the exact names below in the privilege list:
+
+   | Privilege | Needed for |
+   |---|---|
+   | **Services: Captive Portal** | zone settings, sessions, service reconfigure (always) |
+   | **Diagnostics: ARP Table** | IP → MAC at sign-in, presence (always) |
+   | **Services: DHCP: Kea(v4)** | `DHCP_BACKEND=kea` |
+   | **Services: Dnsmasq DNS/DHCP: Settings** | `DHCP_BACKEND=dnsmasq` |
+   | **Services: ISC DHCPv4: Leases** | `DHCP_BACKEND=isc` |
+   | **Firewall: Alias: Edit** | `ACCESS_MODE=alias` or `both` |
 2. **System > Access > Users**: create the user `guest-portal` with a random password and the group above. Under **API keys**, click **+** and save the downloaded `key`/`secret` as `OPNSENSE_KEY`/`OPNSENSE_SECRET`.
-3. If the portal logs `HTTP 403` for an endpoint, add the privilege that matches that endpoint (see the [endpoint table](#opnsense-api-endpoints-used)).
+3. If the portal logs `HTTP 403 Forbidden` for an endpoint, the API user is missing the privilege for it. Find the endpoint in the table above or the [endpoint table](#opnsense-api-endpoints-used) and add the matching privilege. The OPNsense log (**System > Log Files > General**) names the refused URL and user.
+
+   OPNsense checks privileges against the literal URL. In 25.7 the privilege patterns changed from camelCase to snake_case (e.g. `getArp*` became `get_arp*`). The portal calls the snake_case names and retries the old camelCase name once on a 403, so it works on both. Portal versions up to 0.1.3 called `getArp` and got a 403 on 25.7+ even with **Diagnostics: ARP Table** granted.
 
 ### Optional: sign-in prompt (DHCP option 114)
 
@@ -468,21 +475,23 @@ The admin page tags locally-administered (randomized) addresses as **private**. 
 
 All calls live in [app/opnsense.py](app/opnsense.py). They were checked against the `opnsense/core` and `opnsense/plugins` source (controllers `CaptivePortal/Api/SettingsController`, `SessionController`, `ServiceController`, `Diagnostics/Api/InterfaceController`, `Kea/Api/Leases4Controller`, `Dnsmasq/Api/LeasesController`, `DHCPv4/Api/LeasesController` in `net/isc-dhcp`, and `Firewall/Api/AliasController`).
 
+Paths use snake_case, which is what OPNsense 25.7+ uses in its privilege patterns. On a 403 the client retries once with the pre-25.7 camelCase spelling (`getArp`, `searchZones`, ...).
+
 | Method | Endpoint | Used for |
 |---|---|---|
-| GET | `/api/captiveportal/settings/searchZones` | find the zone UUID for `OPNSENSE_ZONE_ID` |
-| GET | `/api/captiveportal/settings/getZone/{uuid}` | read `allowedMACAddresses` |
-| POST | `/api/captiveportal/settings/setZone/{uuid}` | write `{"zone": {"allowedMACAddresses": "mac1,mac2"}}` |
+| GET | `/api/captiveportal/settings/search_zones` | find the zone UUID for `OPNSENSE_ZONE_ID` |
+| GET | `/api/captiveportal/settings/get_zone/{uuid}` | read `allowedMACAddresses` |
+| POST | `/api/captiveportal/settings/set_zone/{uuid}` | write `{"zone": {"allowedMACAddresses": "mac1,mac2"}}` |
 | POST | `/api/captiveportal/service/reconfigure` | apply zone changes |
 | GET | `/api/captiveportal/session/list/{zoneid}` | active sessions (reconciler, revoke) |
 | POST | `/api/captiveportal/session/disconnect/{zoneid}` | body `{"sessionId": "..."}`: kick a revoked device |
-| GET | `/api/diagnostics/interface/getArp` | IP → MAC at sign-in; presence |
+| GET | `/api/diagnostics/interface/get_arp` | IP → MAC at sign-in; presence |
 | GET | `/api/kea/leases4/search` | Kea leases (presence) |
 | GET | `/api/dnsmasq/leases/search` | Dnsmasq leases (presence) |
-| GET | `/api/dhcpv4/leases/searchLease` | ISC leases (os-isc-dhcp plugin) |
-| GET | `/api/firewall/alias/getAliasUUID/{name}` | find `GUEST_AUTH_MACS` |
-| GET | `/api/firewall/alias/getItem/{uuid}` | read alias content |
-| POST | `/api/firewall/alias/setItem/{uuid}` | write `{"alias": {"content": "mac1\nmac2"}}` |
+| GET | `/api/dhcpv4/leases/search_lease` | ISC leases (os-isc-dhcp plugin) |
+| GET | `/api/firewall/alias/get_alias_uuid/{name}` | find `GUEST_AUTH_MACS` |
+| GET | `/api/firewall/alias/get_item/{uuid}` | read alias content |
+| POST | `/api/firewall/alias/set_item/{uuid}` | write `{"alias": {"content": "mac1\nmac2"}}` |
 | POST | `/api/firewall/alias/reconfigure` | apply the alias |
 
 Zone and alias writes are read-modify-write under a lock, so concurrent sign-ins can't overwrite each other's changes.

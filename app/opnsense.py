@@ -1,24 +1,26 @@
 """Single wrapper around every OPNsense REST call the portal makes.
 
-Endpoints were checked against opnsense/core (master) and opnsense/plugins (net/isc-dhcp):
+Endpoints were checked against opnsense/core (master) and opnsense/plugins (net/isc-dhcp).
+Paths use snake_case, which OPNsense 25.7+ uses in its ACL patterns. On a 403 the client
+retries once with the pre-25.7 camelCase name (see _request).
 
   Captive portal
-    GET  /api/captiveportal/settings/searchZones           list zones (uuid <-> zoneid)
-    GET  /api/captiveportal/settings/getZone/{uuid}        read zone, incl. allowedMACAddresses
-    POST /api/captiveportal/settings/setZone/{uuid}        write allowedMACAddresses (comma list)
+    GET  /api/captiveportal/settings/search_zones           list zones (uuid <-> zoneid)
+    GET  /api/captiveportal/settings/get_zone/{uuid}        read zone, incl. allowedMACAddresses
+    POST /api/captiveportal/settings/set_zone/{uuid}        write allowedMACAddresses (comma list)
     POST /api/captiveportal/service/reconfigure            apply zone changes
     GET  /api/captiveportal/session/list/{zoneid}          active sessions
     POST /api/captiveportal/session/disconnect/{zoneid}    body: sessionId
   Diagnostics
-    GET  /api/diagnostics/interface/getArp                 ARP table
+    GET  /api/diagnostics/interface/get_arp                 ARP table
   DHCP leases (one of)
     GET  /api/kea/leases4/search                           Kea DHCPv4
     GET  /api/dnsmasq/leases/search                        Dnsmasq
-    GET  /api/dhcpv4/leases/searchLease                    ISC DHCPv4 (os-isc-dhcp plugin)
+    GET  /api/dhcpv4/leases/search_lease                    ISC DHCPv4 (os-isc-dhcp plugin)
   Firewall alias (ACCESS_MODE=alias|both)
-    GET  /api/firewall/alias/getAliasUUID/{name}
-    GET  /api/firewall/alias/getItem/{uuid}
-    POST /api/firewall/alias/setItem/{uuid}                body: alias.content (newline list)
+    GET  /api/firewall/alias/get_alias_uuid/{name}
+    GET  /api/firewall/alias/get_item/{uuid}
+    POST /api/firewall/alias/set_item/{uuid}                body: alias.content (newline list)
     POST /api/firewall/alias/reconfigure
 """
 from __future__ import annotations
@@ -38,6 +40,15 @@ log = logging.getLogger(__name__)
 
 class OPNsenseError(Exception):
     pass
+
+
+def _camel_action(path: str) -> str:
+    """'diagnostics/interface/get_arp' -> 'diagnostics/interface/getArp' (pre-25.7 ACL spelling)."""
+    parts = path.lstrip("/").split("/")
+    if len(parts) >= 3 and "_" in parts[2]:
+        head, *rest = parts[2].split("_")
+        parts[2] = head + "".join(w.upper() if w == "uuid" else w.capitalize() for w in rest)
+    return "/".join(parts)
 
 
 @dataclass
@@ -136,11 +147,21 @@ class OPNsenseClient:
         await self._http.aclose()
 
     # ------------------------------------------------------------------ http
-    async def _request(self, method: str, path: str, **kw) -> Any:
+    async def _send(self, method: str, path: str, **kw) -> httpx.Response:
         try:
-            resp = await self._http.request(method, path.lstrip("/"), **kw)
+            return await self._http.request(method, path.lstrip("/"), **kw)
         except httpx.HTTPError as exc:
             raise OPNsenseError(f"{method} {path}: {exc}") from exc
+
+    async def _request(self, method: str, path: str, **kw) -> Any:
+        resp = await self._send(method, path, **kw)
+        if resp.status_code == 403 and (legacy := _camel_action(path)) != path:
+            # OPNsense matches API privileges against the literal URL. Since 25.7 the ACL
+            # patterns are snake_case (e.g. "get_arp*"); older releases used camelCase
+            # ("getArp*"). Try the old spelling once so both work with a non-admin key.
+            old = await self._send(method, legacy, **kw)
+            if old.status_code != 403:
+                resp, path = old, legacy
         if resp.status_code >= 400:
             raise OPNsenseError(f"{method} {path}: HTTP {resp.status_code} {resp.text[:200]}")
         try:
@@ -158,7 +179,7 @@ class OPNsenseClient:
     async def zone_uuid(self) -> str:
         if self._zone_uuid:
             return self._zone_uuid
-        data = await self._get("captiveportal/settings/searchZones", rowCount=-1)
+        data = await self._get("captiveportal/settings/search_zones", rowCount=-1)
         for row in data.get("rows", []):
             if str(row.get("zoneid")) == str(self.zone_id):
                 self._zone_uuid = row["uuid"]
@@ -167,14 +188,14 @@ class OPNsenseClient:
 
     async def get_allowed_macs(self) -> set[str]:
         uuid = await self.zone_uuid()
-        data = await self._get(f"captiveportal/settings/getZone/{uuid}")
+        data = await self._get(f"captiveportal/settings/get_zone/{uuid}")
         zone = data.get("zone", {})
         return {m for m in (normalize_mac(x) for x in parse_list_field(zone.get("allowedMACAddresses"))) if m}
 
     async def _write_allowed_macs(self, macs: Iterable[str]) -> None:
         uuid = await self.zone_uuid()
         body = {"zone": {"allowedMACAddresses": ",".join(sorted(macs))}}
-        res = await self._post(f"captiveportal/settings/setZone/{uuid}", body)
+        res = await self._post(f"captiveportal/settings/set_zone/{uuid}", body)
         if res.get("result") != "saved":
             raise OPNsenseError(f"setZone failed: {res}")
         await self.reconfigure_captiveportal()
@@ -234,7 +255,7 @@ class OPNsenseClient:
 
     # ------------------------------------------------------------------- ARP
     async def get_arp(self, interfaces: list[str] | None = None) -> list[ArpEntry]:
-        data = await self._get("diagnostics/interface/getArp")
+        data = await self._get("diagnostics/interface/get_arp")
         rows = data if isinstance(data, list) else data.get("rows", []) if isinstance(data, dict) else []
         out = []
         for r in rows:
@@ -271,7 +292,7 @@ class OPNsenseClient:
         elif backend == "dnsmasq":
             data = await self._get("dnsmasq/leases/search", rowCount=-1, current=1)
         elif backend == "isc":
-            data = await self._get("dhcpv4/leases/searchLease", rowCount=-1, current=1)
+            data = await self._get("dhcpv4/leases/search_lease", rowCount=-1, current=1)
         else:
             raise ValueError(f"unknown DHCP backend {backend}")
         now = time.time()
@@ -306,7 +327,7 @@ class OPNsenseClient:
     async def alias_uuid(self) -> str:
         if self._alias_uuid:
             return self._alias_uuid
-        data = await self._get(f"firewall/alias/getAliasUUID/{self.alias_name}")
+        data = await self._get(f"firewall/alias/get_alias_uuid/{self.alias_name}")
         uuid = data.get("uuid") if isinstance(data, dict) else None
         if not uuid:
             raise OPNsenseError(f"alias {self.alias_name} not found")
@@ -315,13 +336,13 @@ class OPNsenseClient:
 
     async def get_alias_macs(self) -> set[str]:
         uuid = await self.alias_uuid()
-        data = await self._get(f"firewall/alias/getItem/{uuid}")
+        data = await self._get(f"firewall/alias/get_item/{uuid}")
         content = data.get("alias", {}).get("content")
         return {m for m in (normalize_mac(x) for x in parse_list_field(content)) if m}
 
     async def _write_alias_macs(self, macs: Iterable[str]) -> None:
         uuid = await self.alias_uuid()
-        res = await self._post(f"firewall/alias/setItem/{uuid}", {"alias": {"content": "\n".join(sorted(macs))}})
+        res = await self._post(f"firewall/alias/set_item/{uuid}", {"alias": {"content": "\n".join(sorted(macs))}})
         if res.get("result") != "saved":
             raise OPNsenseError(f"alias setItem failed: {res}")
         await self._post("firewall/alias/reconfigure")
